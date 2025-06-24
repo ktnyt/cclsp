@@ -1,4 +1,4 @@
-# lsmcp
+# cclsp
 
 MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) functionality to MCP tools. It allows MCP clients to access LSP features like "go to definition" and "find references" through a standardized interface.
 
@@ -34,11 +34,11 @@ Configure in your MCP client (e.g., Claude Code):
 ```json
 {
   "mcpServers": {
-    "lsmcp": {
+    "cclsp": {
       "command": "node",
-      "args": ["/path/to/lsmcp/dist/index.js"],
+      "args": ["/path/to/cclsp/dist/index.js"],
       "env": {
-        "LSMCP_CONFIG_PATH": "/path/to/your/lsmcp.json"
+        "CCLSP_CONFIG_PATH": "/path/to/your/cclsp.json"
       }
     }
   }
@@ -47,7 +47,7 @@ Configure in your MCP client (e.g., Claude Code):
 
 ### Configuration
 
-Create an `lsmcp.json` configuration file:
+Create an `cclsp.json` configuration file:
 
 ```json
 {

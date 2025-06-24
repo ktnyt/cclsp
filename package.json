@@ -1,10 +1,10 @@
 {
-  "name": "lsmcp",
+  "name": "cclsp",
   "version": "0.1.0",
   "description": "MCP server for accessing LSP functionality",
   "main": "dist/index.js",
   "bin": {
-    "lsmcp": "dist/index.js"
+    "cclsp": "dist/index.js"
   },
   "type": "module",
   "scripts": {

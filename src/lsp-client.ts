@@ -1,6 +1,6 @@
-import { type ChildProcess, spawn } from 'child_process';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { type ChildProcess, spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Config, LSPServerConfig, Location, Position } from './types.js';
 
 interface LSPMessage {
@@ -27,16 +27,16 @@ export class LSPClient {
   constructor(configPath?: string) {
     try {
       // First try to load from environment variable (MCP config)
-      if (process.env.LSMCP_CONFIG_PATH) {
-        console.log(`Loading config from LSMCP_CONFIG_PATH: ${process.env.LSMCP_CONFIG_PATH}`);
-        const configData = readFileSync(process.env.LSMCP_CONFIG_PATH, 'utf-8');
+      if (process.env.CCLSP_CONFIG_PATH) {
+        console.log(`Loading config from CCLSP_CONFIG_PATH: ${process.env.CCLSP_CONFIG_PATH}`);
+        const configData = readFileSync(process.env.CCLSP_CONFIG_PATH, 'utf-8');
         this.config = JSON.parse(configData);
         console.log(`Loaded ${this.config.servers.length} server configurations from env`);
         return;
       }
 
       // Fallback to config file
-      const defaultConfigPath = configPath || join(process.cwd(), 'lsmcp.config.json');
+      const defaultConfigPath = configPath || join(process.cwd(), 'cclsp.config.json');
       console.log(`Loading config from file: ${defaultConfigPath}`);
       const configData = readFileSync(defaultConfigPath, 'utf-8');
       this.config = JSON.parse(configData);
@@ -98,7 +98,7 @@ export class LSPClient {
         const headerPart = buffer.substring(0, headerEndIndex);
         const contentLengthMatch = headerPart.match(/Content-Length: (\d+)/);
 
-        if (contentLengthMatch && contentLengthMatch[1]) {
+        if (contentLengthMatch?.[1]) {
           const contentLength = Number.parseInt(contentLengthMatch[1]);
           const messageStart = headerEndIndex + 4;
 
@@ -128,7 +128,7 @@ export class LSPClient {
     // Initialize the server
     const initResult = await this.sendRequest(childProcess, 'initialize', {
       processId: childProcess.pid!,
-      clientInfo: { name: 'lsmcp', version: '0.1.0' },
+      clientInfo: { name: 'cclsp', version: '0.1.0' },
       capabilities: {
         textDocument: {
           synchronization: {
@@ -318,7 +318,8 @@ export class LSPClient {
         uri: loc.uri,
         range: loc.range,
       }));
-    } else if (result && result.uri) {
+    }
+    if (result?.uri) {
       return [
         {
           uri: result.uri,

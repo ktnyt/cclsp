@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-lsmcp is an MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) functionality to MCP tools. It allows MCP clients to access LSP features like "go to definition" and "find references" through a standardized interface.
+cclsp is an MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) functionality to MCP tools. It allows MCP clients to access LSP features like "go to definition" and "find references" through a standardized interface.
 
 ## Development Commands
 
@@ -41,10 +41,10 @@ node dist/index.js
 - Maps file extensions to appropriate language servers
 - Maintains process lifecycle and request/response correlation
 
-**Configuration System** (`lsmcp.config.json`)
+**Configuration System** (`cclsp.config.json`)
 
 - Defines which LSP servers to use for different file extensions
-- Supports environment-based config via `LSMCP_CONFIG_PATH` env var
+- Supports environment-based config via `CCLSP_CONFIG_PATH` env var
 - Falls back to default TypeScript server if no config found
 
 ### Data Flow
@@ -75,8 +75,8 @@ Supported language servers (configurable):
 
 The server loads configuration in this order:
 
-1. `LSMCP_CONFIG_PATH` environment variable (JSON string)
-2. `lsmcp.config.json` file in working directory
+1. `CCLSP_CONFIG_PATH` environment variable (JSON string)
+2. `cclsp.config.json` file in working directory
 3. Default TypeScript-only configuration
 
 Each server config requires:

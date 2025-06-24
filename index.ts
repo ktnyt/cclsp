@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -10,7 +10,7 @@ const lspClient = new LSPClient();
 
 const server = new Server(
   {
-    name: 'lsmcp',
+    name: 'cclsp',
     version: '0.1.0',
   },
   {
@@ -194,7 +194,7 @@ process.on('SIGTERM', () => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('LSMCP Server running on stdio');
+  console.error('CCLSP Server running on stdio');
 }
 
 main().catch((error) => {
