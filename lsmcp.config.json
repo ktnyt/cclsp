@@ -1,0 +1,190 @@
+{
+  "servers": [
+    {
+      "extensions": ["js", "ts", "jsx", "tsx", "mjs", "cjs"],
+      "command": ["npx", "--", "typescript-language-server", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["py", "pyi"],
+      "command": ["uvx", "--from", "python-lsp-server", "pylsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["go", "mod", "sum"],
+      "command": ["gopls"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["rs"],
+      "command": ["rust-analyzer"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["c", "h"],
+      "command": ["clangd"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["cpp", "cxx", "cc", "hpp", "hxx"],
+      "command": ["clangd"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["java"],
+      "command": ["jdtls"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["cs"],
+      "command": ["OmniSharp", "--languageserver"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["php"],
+      "command": ["intelephense", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["rb"],
+      "command": ["solargraph", "stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["swift"],
+      "command": ["sourcekit-lsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["kt", "kts"],
+      "command": ["kotlin-language-server"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["scala", "sc"],
+      "command": ["metals"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["dart"],
+      "command": ["dart", "language-server", "--protocol=lsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["lua"],
+      "command": ["lua-language-server", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["sh", "bash", "zsh"],
+      "command": ["bash-language-server", "start"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["json"],
+      "command": ["vscode-json-languageserver", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["yaml", "yml"],
+      "command": ["yaml-language-server", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["xml"],
+      "command": ["lemminx"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["html", "htm"],
+      "command": ["vscode-html-languageserver", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["css", "scss", "sass", "less"],
+      "command": ["vscode-css-languageserver", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["vue"],
+      "command": ["vls"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["svelte"],
+      "command": ["svelteserver", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["dockerfile"],
+      "command": ["docker-langserver", "--stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["terraform", "tf", "tfvars"],
+      "command": ["terraform-ls", "serve"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["sql"],
+      "command": ["sql-language-server", "up", "--method", "stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["graphql", "gql"],
+      "command": ["graphql-lsp", "server", "-m", "stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["md", "markdown"],
+      "command": ["marksman", "server"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["tex", "latex"],
+      "command": ["texlab"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["elm"],
+      "command": ["elm-language-server"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["haskell", "hs", "lhs"],
+      "command": ["haskell-language-server-wrapper", "--lsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["ocaml", "ml", "mli"],
+      "command": ["ocamllsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["clj", "cljs", "cljc", "edn"],
+      "command": ["clojure-lsp"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["fs", "fsx", "fsi"],
+      "command": ["fsautocomplete", "--background-service-enabled"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["r", "R"],
+      "command": ["R", "--slave", "-e", "languageserver::run()"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["toml"],
+      "command": ["taplo", "lsp", "stdio"],
+      "rootDir": "."
+    },
+    {
+      "extensions": ["zig"],
+      "command": ["zls"],
+      "rootDir": "."
+    }
+  ]
+}
+

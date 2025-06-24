@@ -1,0 +1,39 @@
+{
+  "name": "lsmcp",
+  "version": "0.1.0",
+  "description": "MCP server for accessing LSP functionality",
+  "main": "dist/index.js",
+  "bin": {
+    "lsmcp": "dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "bun build --target=node --outdir=dist index.ts",
+    "dev": "bun run --watch index.ts",
+    "start": "node dist/index.js",
+    "test": "bun test",
+    "test:manual": "node test_mcp_client.cjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["mcp", "lsp", "language-server"],
+  "author": "nano",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.3",
+    "typescript-language-server": "^4.3.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
