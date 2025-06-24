@@ -16,11 +16,26 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run test && npm run typecheck"
   },
-  "keywords": ["mcp", "lsp", "language-server"],
+  "keywords": ["mcp", "lsp", "language-server", "model-context-protocol", "claude-code"],
   "author": "nano",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ktnyt/cclsp.git"
+  },
+  "homepage": "https://github.com/ktnyt/cclsp#readme",
+  "bugs": {
+    "url": "https://github.com/ktnyt/cclsp/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CLAUDE.md",
+    "cclsp.config.json"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",
     "typescript-language-server": "^4.3.4"

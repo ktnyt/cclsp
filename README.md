@@ -14,7 +14,19 @@ MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) 
 
 ## Installation
 
+### From npm (Recommended)
+
 ```bash
+npm install -g cclsp
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/ktnyt/cclsp.git
+cd cclsp
+
 # Install dependencies
 bun install
 
@@ -30,6 +42,23 @@ bun run start
 ### As MCP Server
 
 Configure in your MCP client (e.g., Claude Code):
+
+#### Using npm package (after global install)
+
+```json
+{
+  "mcpServers": {
+    "cclsp": {
+      "command": "cclsp",
+      "env": {
+        "CCLSP_CONFIG_PATH": "/path/to/your/cclsp.json"
+      }
+    }
+  }
+}
+```
+
+#### Using local installation
 
 ```json
 {

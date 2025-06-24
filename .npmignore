@@ -1,0 +1,31 @@
+# Source files
+src/
+index.ts
+*.ts
+!dist/
+
+# Development files
+.cursor/
+node_modules/
+bun.lock
+tsconfig.json
+biome.json
+
+# Test files
+test_*
+*.test.ts
+*.test.js
+
+# Development configs
+.env
+.env.*
+
+# Git files
+.git/
+.gitignore
+
+# Documentation (keep README.md and CLAUDE.md)
+# Other markdown files except main docs
+
+# Build artifacts that shouldn't be published
+*.tsbuildinfo
