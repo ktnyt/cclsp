@@ -123,7 +123,7 @@ The server exposes these MCP tools:
 
 ### `find_definition`
 
-Find the definition of a symbol at a specific position.
+Find the definition of a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
 
 **Parameters:**
 - `file_path`: Absolute path to the file
@@ -132,7 +132,7 @@ Find the definition of a symbol at a specific position.
 
 ### `find_references`
 
-Find all references to a symbol at a specific position.
+Find all references to a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
 
 **Parameters:**
 - `file_path`: Absolute path to the file  

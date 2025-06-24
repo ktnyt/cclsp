@@ -25,7 +25,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'find_definition',
-        description: 'Find the definition of a symbol at a specific position in a file',
+        description:
+          'Find the definition of a symbol at a specific position in a file. Returns line/character numbers as 1-based for human readability.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -47,7 +48,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'find_references',
-        description: 'Find all references to a symbol at a specific position in a file',
+        description:
+          'Find all references to a symbol at a specific position in a file. Returns line/character numbers as 1-based for human readability.',
         inputSchema: {
           type: 'object',
           properties: {

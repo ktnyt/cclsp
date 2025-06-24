@@ -1,6 +1,6 @@
 {
   "name": "cclsp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for accessing LSP functionality",
   "main": "dist/index.js",
   "bin": {
@@ -19,7 +19,13 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run test && npm run typecheck"
   },
-  "keywords": ["mcp", "lsp", "language-server", "model-context-protocol", "claude-code"],
+  "keywords": [
+    "mcp",
+    "lsp",
+    "language-server",
+    "model-context-protocol",
+    "claude-code"
+  ],
   "author": "nano",
   "license": "MIT",
   "repository": {

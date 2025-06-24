@@ -1,15 +1,22 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Config, LSPServerConfig, Location, Position } from './types.js';
+import type {
+  Config,
+  LSPError,
+  LSPLocation,
+  LSPServerConfig,
+  Location,
+  Position,
+} from './types.js';
 
 interface LSPMessage {
   jsonrpc: string;
   id?: number;
   method?: string;
-  params?: any;
-  result?: any;
-  error?: any;
+  params?: unknown;
+  result?: unknown;
+  error?: LSPError;
 }
 
 interface ServerState {
@@ -22,7 +29,10 @@ export class LSPClient {
   private config: Config;
   private servers: Map<string, ServerState> = new Map();
   private nextId = 1;
-  private pendingRequests: Map<number, { resolve: Function; reject: Function }> = new Map();
+  private pendingRequests: Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }
+  > = new Map();
 
   constructor(configPath?: string) {
     try {
@@ -78,7 +88,10 @@ export class LSPClient {
 
   private async startServer(serverConfig: LSPServerConfig): Promise<ServerState> {
     const [command, ...args] = serverConfig.command;
-    const childProcess = spawn(command!, args, {
+    if (!command) {
+      throw new Error('No command specified in server config');
+    }
+    const childProcess = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: serverConfig.rootDir || process.cwd(),
     });
@@ -127,7 +140,7 @@ export class LSPClient {
 
     // Initialize the server
     const initResult = await this.sendRequest(childProcess, 'initialize', {
-      processId: childProcess.pid!,
+      processId: childProcess.pid || null,
       clientInfo: { name: 'cclsp', version: '0.1.0' },
       capabilities: {
         textDocument: {
@@ -163,7 +176,9 @@ export class LSPClient {
 
   private handleMessage(message: LSPMessage, serverState?: ServerState) {
     if (message.id && this.pendingRequests.has(message.id)) {
-      const { resolve, reject } = this.pendingRequests.get(message.id)!;
+      const request = this.pendingRequests.get(message.id);
+      if (!request) return;
+      const { resolve, reject } = request;
       this.pendingRequests.delete(message.id);
 
       if (message.error) {
@@ -185,7 +200,7 @@ export class LSPClient {
     process.stdin?.write(header + content);
   }
 
-  private sendRequest(process: ChildProcess, method: string, params: any): Promise<any> {
+  private sendRequest(process: ChildProcess, method: string, params: unknown): Promise<unknown> {
     const id = this.nextId++;
     const message: LSPMessage = {
       jsonrpc: '2.0',
@@ -200,7 +215,7 @@ export class LSPClient {
     });
   }
 
-  private sendNotification(process: ChildProcess, method: string, params: any): void {
+  private sendNotification(process: ChildProcess, method: string, params: unknown): void {
     const message: LSPMessage = {
       jsonrpc: '2.0',
       method,
@@ -299,7 +314,11 @@ export class LSPClient {
       this.servers.set(key, serverState);
     }
 
-    return this.servers.get(key)!;
+    const server = this.servers.get(key);
+    if (!server) {
+      throw new Error('Failed to get or create server');
+    }
+    return server;
   }
 
   async findDefinition(filePath: string, position: Position): Promise<Location[]> {
@@ -314,16 +333,17 @@ export class LSPClient {
     });
 
     if (Array.isArray(result)) {
-      return result.map((loc: any) => ({
+      return result.map((loc: LSPLocation) => ({
         uri: loc.uri,
         range: loc.range,
       }));
     }
-    if (result?.uri) {
+    if (result && typeof result === 'object' && 'uri' in result) {
+      const location = result as LSPLocation;
       return [
         {
-          uri: result.uri,
-          range: result.range,
+          uri: location.uri,
+          range: location.range,
         },
       ];
     }
@@ -348,7 +368,7 @@ export class LSPClient {
     });
 
     if (Array.isArray(result)) {
-      return result.map((loc: any) => ({
+      return result.map((loc: LSPLocation) => ({
         uri: loc.uri,
         range: loc.range,
       }));

@@ -28,3 +28,17 @@ export interface DefinitionResult {
 export interface ReferenceResult {
   locations: Location[];
 }
+
+export interface LSPError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+
+export interface LSPLocation {
+  uri: string;
+  range: {
+    start: Position;
+    end: Position;
+  };
+}
