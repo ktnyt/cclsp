@@ -140,6 +140,16 @@ Find all references to a symbol at a specific position. Returns line/character n
 - `character`: Character position (0-based)
 - `include_declaration`: Whether to include the declaration (optional, default: true)
 
+### `rename_symbol`
+
+Rename a symbol at a specific position in a file. Returns the file changes needed to rename the symbol across the codebase.
+
+**Parameters:**
+- `file_path`: Absolute path to the file
+- `line`: Line number (0-based)
+- `character`: Character position (0-based)
+- `new_name`: The new name for the symbol
+
 ## License
 
 MIT

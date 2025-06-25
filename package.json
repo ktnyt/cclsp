@@ -1,6 +1,6 @@
 {
   "name": "cclsp",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "description": "MCP server for accessing LSP functionality",
   "main": "dist/index.js",
   "bin": {
@@ -44,6 +44,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",
+    "ignore": "^7.0.5",
     "typescript-language-server": "^4.3.4"
   },
   "devDependencies": {

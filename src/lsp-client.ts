@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import ignore from 'ignore';
 import type {
   Config,
   LSPError,
@@ -35,22 +36,39 @@ export class LSPClient {
   > = new Map();
 
   constructor(configPath?: string) {
-    try {
-      // First try to load from environment variable (MCP config)
-      if (process.env.CCLSP_CONFIG_PATH) {
-        console.log(`Loading config from CCLSP_CONFIG_PATH: ${process.env.CCLSP_CONFIG_PATH}`);
-        const configData = readFileSync(process.env.CCLSP_CONFIG_PATH, 'utf-8');
-        this.config = JSON.parse(configData);
-        console.log(`Loaded ${this.config.servers.length} server configurations from env`);
-        return;
+    // First try to load from environment variable (MCP config)
+    if (process.env.CCLSP_CONFIG_PATH) {
+      process.stderr.write(
+        `Loading config from CCLSP_CONFIG_PATH: ${process.env.CCLSP_CONFIG_PATH}\n`
+      );
+
+      if (!existsSync(process.env.CCLSP_CONFIG_PATH)) {
+        process.stderr.write(
+          `Config file specified in CCLSP_CONFIG_PATH does not exist: ${process.env.CCLSP_CONFIG_PATH}\n`
+        );
+        process.exit(1);
       }
 
-      // Fallback to config file
+      try {
+        const configData = readFileSync(process.env.CCLSP_CONFIG_PATH, 'utf-8');
+        this.config = JSON.parse(configData);
+        process.stderr.write(
+          `Loaded ${this.config.servers.length} server configurations from env\n`
+        );
+        return;
+      } catch (error) {
+        process.stderr.write(`Failed to load config from CCLSP_CONFIG_PATH: ${error}\n`);
+        process.exit(1);
+      }
+    }
+
+    // Try to load from config file if no env var is set
+    try {
       const defaultConfigPath = configPath || join(process.cwd(), 'cclsp.config.json');
-      console.log(`Loading config from file: ${defaultConfigPath}`);
+      process.stderr.write(`Loading config from file: ${defaultConfigPath}\n`);
       const configData = readFileSync(defaultConfigPath, 'utf-8');
       this.config = JSON.parse(configData);
-      console.log(`Loaded ${this.config.servers.length} server configurations`);
+      process.stderr.write(`Loaded ${this.config.servers.length} server configurations\n`);
     } catch (error) {
       // Default configuration if no config found
       this.config = {
@@ -62,7 +80,7 @@ export class LSPClient {
           },
         ],
       };
-      console.error(`Using default config. Config error: ${error}`);
+      process.stderr.write(`Using default config. Config error: ${error}\n`);
     }
   }
 
@@ -70,17 +88,17 @@ export class LSPClient {
     const extension = filePath.split('.').pop();
     if (!extension) return null;
 
-    console.log(`Looking for server for extension: ${extension}`);
-    console.log(
-      `Available servers: ${this.config.servers.map((s) => s.extensions.join(',')).join(' | ')}`
+    process.stderr.write(`Looking for server for extension: ${extension}\n`);
+    process.stderr.write(
+      `Available servers: ${this.config.servers.map((s) => s.extensions.join(',')).join(' | ')}\n`
     );
 
     const server = this.config.servers.find((server) => server.extensions.includes(extension));
 
     if (server) {
-      console.log(`Found server for ${extension}: ${server.command.join(' ')}`);
+      process.stderr.write(`Found server for ${extension}: ${server.command.join(' ')}\n`);
     } else {
-      console.log(`No server found for extension: ${extension}`);
+      process.stderr.write(`No server found for extension: ${extension}\n`);
     }
 
     return server || null;
@@ -123,7 +141,7 @@ export class LSPClient {
               const message: LSPMessage = JSON.parse(messageContent);
               this.handleMessage(message, serverState);
             } catch (error) {
-              console.error('Failed to parse LSP message:', error);
+              process.stderr.write(`Failed to parse LSP message: ${error}\n`);
             }
           } else {
             break;
@@ -135,7 +153,7 @@ export class LSPClient {
     });
 
     childProcess.stderr?.on('data', (data: Buffer) => {
-      console.error('LSP Server stderr:', data.toString());
+      process.stderr.write(`LSP Server stderr: ${data.toString()}`);
     });
 
     // Initialize the server
@@ -151,6 +169,7 @@ export class LSPClient {
           },
           definition: { linkSupport: false },
           references: { includeDeclaration: true },
+          rename: { prepareSupport: false },
         },
         workspace: {
           workspaceFolders: true,
@@ -244,7 +263,7 @@ export class LSPClient {
 
       serverState.openFiles.add(filePath);
     } catch (error) {
-      console.error(`Failed to open file ${filePath}:`, error);
+      process.stderr.write(`Failed to open file ${filePath}: ${error}\n`);
       throw error;
     }
   }
@@ -375,6 +394,163 @@ export class LSPClient {
     }
 
     return [];
+  }
+
+  async renameSymbol(
+    filePath: string,
+    position: Position,
+    newName: string
+  ): Promise<{
+    changes?: Record<string, Array<{ range: { start: Position; end: Position }; newText: string }>>;
+  }> {
+    const serverState = await this.getServer(filePath);
+
+    // Ensure the file is opened and synced with the LSP server
+    await this.ensureFileOpen(serverState, filePath);
+
+    const result = await this.sendRequest(serverState.process, 'textDocument/rename', {
+      textDocument: { uri: `file://${filePath}` },
+      position,
+      newName,
+    });
+
+    if (result && typeof result === 'object' && 'changes' in result) {
+      return result as {
+        changes: Record<
+          string,
+          Array<{ range: { start: Position; end: Position }; newText: string }>
+        >;
+      };
+    }
+
+    return {};
+  }
+
+  private loadGitignore(projectDir: string): ReturnType<typeof ignore> {
+    const ig = ignore();
+
+    // Add common ignore patterns
+    ig.add([
+      'node_modules',
+      'dist',
+      'build',
+      '.git',
+      '.DS_Store',
+      '*.log',
+      '.env*',
+      'coverage',
+      '.nyc_output',
+      'tmp',
+      'temp',
+    ]);
+
+    // Load .gitignore if exists
+    const gitignorePath = join(projectDir, '.gitignore');
+    if (existsSync(gitignorePath)) {
+      try {
+        const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
+        ig.add(gitignoreContent);
+        process.stderr.write('Loaded .gitignore patterns\n');
+      } catch (error) {
+        process.stderr.write(`Failed to read .gitignore: ${error}\n`);
+      }
+    }
+
+    return ig;
+  }
+
+  private scanDirectoryForExtensions(
+    dirPath: string,
+    projectDir: string,
+    ig: ReturnType<typeof ignore>,
+    maxDepth = 3,
+    currentDepth = 0
+  ): Set<string> {
+    const foundExtensions = new Set<string>();
+
+    if (currentDepth >= maxDepth) {
+      return foundExtensions;
+    }
+
+    try {
+      const entries = readdirSync(dirPath);
+
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry);
+        const relativePath = relative(projectDir, fullPath);
+
+        // Skip if ignored by gitignore
+        if (ig.ignores(relativePath)) {
+          continue;
+        }
+
+        const stat = statSync(fullPath);
+
+        if (stat.isDirectory()) {
+          const subExtensions = this.scanDirectoryForExtensions(
+            fullPath,
+            projectDir,
+            ig,
+            maxDepth,
+            currentDepth + 1
+          );
+          for (const ext of subExtensions) {
+            foundExtensions.add(ext);
+          }
+        } else if (stat.isFile()) {
+          const extension = entry.split('.').pop();
+          if (extension) {
+            foundExtensions.add(extension);
+          }
+        }
+      }
+    } catch (error) {
+      process.stderr.write(`Error scanning directory ${dirPath}: ${error}\n`);
+    }
+
+    return foundExtensions;
+  }
+
+  async preloadServers(projectDir: string = process.cwd()): Promise<void> {
+    process.stderr.write(`Scanning project directory for supported file types: ${projectDir}\n`);
+
+    const ig = this.loadGitignore(projectDir);
+    const foundExtensions = this.scanDirectoryForExtensions(projectDir, projectDir, ig);
+    process.stderr.write(`Found extensions: ${Array.from(foundExtensions).join(', ')}\n`);
+
+    const serversToStart = new Set<LSPServerConfig>();
+
+    for (const extension of foundExtensions) {
+      const serverConfig = this.config.servers.find((server) =>
+        server.extensions.includes(extension)
+      );
+      if (serverConfig) {
+        serversToStart.add(serverConfig);
+      }
+    }
+
+    process.stderr.write(`Starting ${serversToStart.size} LSP servers...\n`);
+
+    const startPromises = Array.from(serversToStart).map(async (serverConfig) => {
+      try {
+        const key = JSON.stringify(serverConfig);
+        if (!this.servers.has(key)) {
+          process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
+          const serverState = await this.startServer(serverConfig);
+          this.servers.set(key, serverState);
+          process.stderr.write(
+            `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
+          );
+        }
+      } catch (error) {
+        process.stderr.write(
+          `Failed to preload LSP server for ${serverConfig.extensions.join(', ')}: ${error}\n`
+        );
+      }
+    });
+
+    await Promise.all(startPromises);
+    process.stderr.write('LSP server preloading completed\n');
   }
 
   dispose(): void {

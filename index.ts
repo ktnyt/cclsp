@@ -74,6 +74,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['file_path', 'line', 'character'],
         },
       },
+      {
+        name: 'rename_symbol',
+        description:
+          'Rename a symbol at a specific position in a file. Returns the file changes needed to rename the symbol across the codebase.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (0-based)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (0-based)',
+            },
+            new_name: {
+              type: 'string',
+              description: 'The new name for the symbol',
+            },
+          },
+          required: ['file_path', 'line', 'character', 'new_name'],
+        },
+      },
     ],
   };
 });
@@ -170,6 +197,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    if (name === 'rename_symbol') {
+      const { file_path, line, character, new_name } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+        new_name: string;
+      };
+      const absolutePath = resolve(file_path);
+
+      const workspaceEdit = await lspClient.renameSymbol(
+        absolutePath,
+        { line, character },
+        new_name
+      );
+
+      if (!workspaceEdit || !workspaceEdit.changes) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'No rename edits available',
+            },
+          ],
+        };
+      }
+
+      const changes = [];
+      for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
+        const filePath = uri.replace('file://', '');
+        changes.push(`File: ${filePath}`);
+        for (const edit of edits) {
+          const { start, end } = edit.range;
+          changes.push(
+            `  - Line ${start.line + 1}, Column ${start.character + 1} to Line ${end.line + 1}, Column ${end.character + 1}: "${edit.newText}"`
+          );
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Rename edits:\n${changes.join('\n')}`,
+          },
+        ],
+      };
+    }
+
     throw new Error(`Unknown tool: ${name}`);
   } catch (error) {
     return {
@@ -196,11 +271,18 @@ process.on('SIGTERM', () => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('CCLSP Server running on stdio');
+  process.stderr.write('CCLSP Server running on stdio\n');
+
+  // Preload LSP servers for file types found in the project
+  try {
+    await lspClient.preloadServers();
+  } catch (error) {
+    process.stderr.write(`Failed to preload LSP servers: ${error}\n`);
+  }
 }
 
 main().catch((error) => {
-  console.error('Server error:', error);
+  process.stderr.write(`Server error: ${error}\n`);
   lspClient.dispose();
   process.exit(1);
 });
