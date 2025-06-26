@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- GitHub issue templates for bug reports, feature requests, language support, and questions
+- `CONTRIBUTING.md` with detailed contribution guidelines
+- `CODE_OF_CONDUCT.md` following Contributor Covenant
+- `SECURITY.md` with security policy and reporting guidelines
+- `ROADMAP.md` outlining project vision and planned features
+- GitHub Actions CI/CD pipeline for automated testing and npm publishing
+- Additional badges in README (CI status, npm downloads, PRs welcome)
+- Comprehensive troubleshooting section in README
+- Real-world usage examples in README
+
+### Changed
+- Enhanced README with better structure and more detailed documentation
+- Improved project metadata for better npm discoverability
+
+## [0.2.1] - 2024-12-26
+
+### Added
+- `rename_symbol` MCP tool for refactoring symbols across codebases
+- Enhanced error handling for LSP server failures
+
+### Changed
+- Improved documentation clarity for tool outputs
+- Better type safety in tool interfaces
+
+## [0.2.0] - 2024-12-26
+
+### Added
+- npm publishing configuration
+- Executable binary support (`cclsp` command)
+- Proper package.json metadata
+- Installation instructions in README
+
+### Changed
+- Project renamed from `lsmcp` to `cclsp` for better clarity
+- Updated all references and documentation
+
+## [0.1.0] - 2024-12-26
+
+### Added
+- Initial implementation of MCP server for LSP functionality
+- `find_definition` tool for locating symbol definitions
+- `find_references` tool for finding all symbol references
+- Support for multiple language servers via configuration
+- TypeScript language server as default
+- Basic error handling and logging
+- Test suite with Bun
+- Documentation for setup and usage
+
+[Unreleased]: https://github.com/ktnyt/cclsp/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ktnyt/cclsp/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/ktnyt/cclsp/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ktnyt/cclsp/releases/tag/v0.1.0

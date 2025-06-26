@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+
+    - name: Install dependencies
+      run: bun install
+
+    - name: Run linter
+      run: bun run lint
+
+    - name: Run type check
+      run: bun run typecheck
+
+    - name: Run tests
+      run: bun test
+
+    - name: Build
+      run: bun run build
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+
+    - name: Install dependencies
+      run: bun install
+
+    - name: Build
+      run: bun run build
+
+    - name: Check if version changed
+      id: version
+      run: |
+        if git diff HEAD^ HEAD --name-only | grep -q "package.json"; then
+          VERSION_CHANGED=$(git diff HEAD^ HEAD -- package.json | grep -E '^\+.*"version"' || echo "")
+          if [ -n "$VERSION_CHANGED" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Publish to npm
+      if: steps.version.outputs.changed == 'true'
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

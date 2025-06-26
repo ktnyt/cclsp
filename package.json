@@ -39,6 +39,8 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
     "CLAUDE.md",
     "cclsp.config.json"
   ],
