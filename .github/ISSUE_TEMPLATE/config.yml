@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/ktnyt/cclsp#readme
+    about: Please check the README first for usage instructions
+  - name: Discussions
+    url: https://github.com/ktnyt/cclsp/discussions
+    about: For general discussions and help from the community
