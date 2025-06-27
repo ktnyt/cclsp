@@ -59,18 +59,21 @@ jobs:
     - name: Build
       run: bun run build
 
-    - name: Check if version changed
+    - name: Check if version should be published
       id: version
       run: |
-        if git diff HEAD^ HEAD --name-only | grep -q "package.json"; then
-          VERSION_CHANGED=$(git diff HEAD^ HEAD -- package.json | grep -E '^\+.*"version"' || echo "")
-          if [ -n "$VERSION_CHANGED" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
+        CURRENT_VERSION=$(node -p "require('./package.json').version")
+        PUBLISHED_VERSION=$(npm view cclsp version 2>/dev/null || echo "0.0.0")
+        
+        echo "Current version: $CURRENT_VERSION"
+        echo "Published version: $PUBLISHED_VERSION"
+        
+        if [ "$CURRENT_VERSION" != "$PUBLISHED_VERSION" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "Version changed from $PUBLISHED_VERSION to $CURRENT_VERSION"
         else
           echo "changed=false" >> $GITHUB_OUTPUT
+          echo "Version unchanged: $CURRENT_VERSION"
         fi
 
     - name: Publish to npm

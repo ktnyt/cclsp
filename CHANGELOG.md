@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-06-27
+
+### Fixed
+
+- Improved CI/CD version detection for npm publishing
+- Replaced git-based version change detection with npm registry comparison
+- Enhanced logging for version comparison process in CI workflow
+
 ## [0.3.1] - 2025-06-27
 
 ### Fixed
@@ -39,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced README with better structure and more detailed documentation
 - Improved project metadata for better npm discoverability
 
-## [0.2.1] - 2024-12-26
+## [0.2.1]
 
 ### Added
 
@@ -51,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved documentation clarity for tool outputs
 - Better type safety in tool interfaces
 
-## [0.2.0] - 2024-12-26
+## [0.2.0]
 
 ### Added
 
@@ -65,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project renamed from `lsmcp` to `cclsp` for better clarity
 - Updated all references and documentation
 
-## [0.1.0] - 2024-12-26
+## [0.1.0]
 
 ### Added
 
