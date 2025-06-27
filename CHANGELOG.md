@@ -5,9 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2025-06-27
+
+### Fixed
+
+- `npx cclsp setup` command now executes properly without hanging
+- Setup subcommand execution flow and error handling
+- Eliminated duplicate execution when running setup via `node dist/index.js setup`
+- Streamlined build process by removing separate setup.js compilation
+
+## [0.3.0]
 
 ### Added
+
 - Interactive configuration generator with `cclsp setup` command
 - Support for 15 language servers (TypeScript, Python, Go, Rust, C/C++, Java, Ruby, PHP, C#, Swift, Kotlin, Dart, Elixir, Haskell, Lua)
 - Emacs-style keyboard navigation (Ctrl+P/Ctrl+N) for setup interface
@@ -25,34 +35,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-world usage examples in README
 
 ### Changed
+
 - Enhanced README with better structure and more detailed documentation
 - Improved project metadata for better npm discoverability
 
 ## [0.2.1] - 2024-12-26
 
 ### Added
+
 - `rename_symbol` MCP tool for refactoring symbols across codebases
 - Enhanced error handling for LSP server failures
 
 ### Changed
+
 - Improved documentation clarity for tool outputs
 - Better type safety in tool interfaces
 
 ## [0.2.0] - 2024-12-26
 
 ### Added
+
 - npm publishing configuration
 - Executable binary support (`cclsp` command)
 - Proper package.json metadata
 - Installation instructions in README
 
 ### Changed
+
 - Project renamed from `lsmcp` to `cclsp` for better clarity
 - Updated all references and documentation
 
 ## [0.1.0] - 2024-12-26
 
 ### Added
+
 - Initial implementation of MCP server for LSP functionality
 - `find_definition` tool for locating symbol definitions
 - `find_references` tool for finding all symbol references
@@ -62,7 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite with Bun
 - Documentation for setup and usage
 
-[Unreleased]: https://github.com/ktnyt/cclsp/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/ktnyt/cclsp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ktnyt/cclsp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ktnyt/cclsp/releases/tag/v0.1.0

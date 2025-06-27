@@ -490,7 +490,5 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-main().catch((error) => {
-  console.error(`\n❌ An error occurred: ${error}`);
-  process.exit(1);
-});
+// Export main for use as subcommand from index.js
+export { main };

@@ -6,10 +6,23 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { LSPClient } from './src/lsp-client.js';
 
-// Handle setup subcommand
-if (process.argv.includes('setup')) {
-  const setupModule = await import('./src/setup.js');
-  process.exit(0);
+// Handle subcommands
+const args = process.argv.slice(2);
+if (args.length > 0) {
+  const subcommand = args[0];
+
+  if (subcommand === 'setup') {
+    const { main } = await import('./src/setup.js');
+    await main();
+    process.exit(0);
+  } else {
+    console.error(`Unknown subcommand: ${subcommand}`);
+    console.error('Available subcommands:');
+    console.error('  setup    Configure cclsp for your project');
+    console.error('');
+    console.error('Run without arguments to start the MCP server.');
+    process.exit(1);
+  }
 }
 
 const lspClient = new LSPClient();
