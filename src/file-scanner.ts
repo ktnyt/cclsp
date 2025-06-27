@@ -78,8 +78,8 @@ export async function scanDirectoryForExtensions(
     try {
       const entries = await readdir(currentPath);
       if (debug) {
-        console.log(
-          `Scanning directory ${currentPath} (depth: ${currentDepth}), found ${entries.length} entries: ${entries.join(', ')}`
+        process.stderr.write(
+          `Scanning directory ${currentPath} (depth: ${currentDepth}), found ${entries.length} entries: ${entries.join(', ')}\n`
         );
       }
 
@@ -91,7 +91,7 @@ export async function scanDirectoryForExtensions(
         const normalizedPath = entryRelativePath.replace(/\\/g, '/');
         if (ignoreFilter?.ignores(normalizedPath)) {
           if (debug) {
-            console.log(`Skipping ignored entry: ${entryRelativePath}`);
+            process.stderr.write(`Skipping ignored entry: ${entryRelativePath}\n`);
           }
           continue;
         }
@@ -101,27 +101,27 @@ export async function scanDirectoryForExtensions(
 
           if (fileStat.isDirectory()) {
             if (debug) {
-              console.log(`Recursing into directory: ${entryRelativePath}`);
+              process.stderr.write(`Recursing into directory: ${entryRelativePath}\n`);
             }
             await scanDirectory(fullPath, currentDepth + 1, entryRelativePath);
           } else if (fileStat.isFile()) {
             const ext = extname(entry).toLowerCase().slice(1); // Remove the dot
             if (debug) {
-              console.log(`Found file: ${entry}, extension: "${ext}"`);
+              process.stderr.write(`Found file: ${entry}, extension: "${ext}"\n`);
             }
             if (ext) {
               extensions.add(ext);
               if (debug) {
-                console.log(`Added extension: ${ext}`);
+                process.stderr.write(`Added extension: ${ext}\n`);
               }
             }
           }
         } catch (error) {
-          console.error(`Error processing ${fullPath}: ${error}`);
+          process.stderr.write(`Error processing ${fullPath}: ${error}\n`);
         }
       }
     } catch (error) {
-      console.error(`Error reading directory ${currentPath}: ${error}`);
+      process.stderr.write(`Error reading directory ${currentPath}: ${error}\n`);
       return;
     }
   }

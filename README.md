@@ -112,7 +112,7 @@ npx cclsp setup --user
 The setup wizard will:
 
 1. **🔍 Auto-detect languages** in your project by scanning files
-2. **📋 Show pre-selected LSP servers** based on detected languages  
+2. **📋 Show pre-selected LSP servers** based on detected languages
 3. **📦 Display installation requirements** with detailed guides
 4. **⚡ Install LSPs automatically** (optional, with user confirmation)
 5. **🔗 Add to Claude MCP** (optional, with user confirmation)
@@ -140,6 +140,7 @@ npx cclsp setup
 If you prefer manual configuration:
 
 1. **Install cclsp**:
+
    ```bash
    npm install -g cclsp
    ```
@@ -147,10 +148,11 @@ If you prefer manual configuration:
 2. **Install language servers** (see [Language Server Installation](#language-server-installation))
 
 3. **Create configuration file**:
+
    ```bash
    # Use the interactive generator
    cclsp setup
-   
+
    # Or create manually (see Configuration section)
    ```
 
@@ -167,28 +169,33 @@ The setup wizard shows installation commands for each LSP, but you can also inst
 <summary>📦 Common Language Servers</summary>
 
 #### TypeScript/JavaScript
+
 ```bash
 npm install -g typescript-language-server typescript
 ```
 
 #### Python
+
 ```bash
 pip install "python-lsp-server[all]"
 # Or basic installation: pip install python-lsp-server
 ```
 
 #### Go
+
 ```bash
 go install golang.org/x/tools/gopls@latest
 ```
 
 #### Rust
+
 ```bash
 rustup component add rust-analyzer
 rustup component add rust-src
 ```
 
 #### C/C++
+
 ```bash
 # Ubuntu/Debian
 sudo apt install clangd
@@ -200,11 +207,13 @@ brew install llvm
 ```
 
 #### Ruby
+
 ```bash
 gem install solargraph
 ```
 
 #### PHP
+
 ```bash
 npm install -g intelephense
 ```
@@ -218,6 +227,7 @@ For more languages and detailed instructions, run `npx cclsp setup` and select "
 After setup, verify cclsp is working:
 
 1. **Check configuration**:
+
    ```bash
    npx cclsp --help
    ```
@@ -282,6 +292,7 @@ bun run setup
 ```
 
 The interactive tool will:
+
 - Show you all available language servers
 - Let you select which ones to configure with intuitive controls:
   - **Navigation**: ↑/↓ arrow keys or Ctrl+P/Ctrl+N (Emacs-style)
@@ -361,6 +372,7 @@ Alternatively, create an `cclsp.json` configuration file manually:
   ]
 }
 ```
+
 </details>
 
 ## 🛠️ Development
@@ -394,6 +406,7 @@ The server exposes these MCP tools:
 Find the definition of a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
 
 **Parameters:**
+
 - `file_path`: Absolute path to the file
 - `line`: Line number (0-based)
 - `character`: Character position (0-based)
@@ -403,7 +416,8 @@ Find the definition of a symbol at a specific position. Returns line/character n
 Find all references to a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
 
 **Parameters:**
-- `file_path`: Absolute path to the file  
+
+- `file_path`: Absolute path to the file
 - `line`: Line number (0-based)
 - `character`: Character position (0-based)
 - `include_declaration`: Whether to include the declaration (optional, default: true)
@@ -413,6 +427,7 @@ Find all references to a symbol at a specific position. Returns line/character n
 Rename a symbol at a specific position in a file. Returns the file changes needed to rename the symbol across the codebase.
 
 **Parameters:**
+
 - `file_path`: Absolute path to the file
 - `line`: Line number (0-based)
 - `character`: Character position (0-based)
@@ -468,6 +483,7 @@ Result: 12 files will be updated with the new name
 **Problem**: Error message about LSP server not found
 
 **Solution**: Ensure the language server is installed:
+
 ```bash
 # For TypeScript
 npm install -g typescript-language-server
@@ -478,6 +494,7 @@ pip install python-lsp-server
 # For Go
 go install golang.org/x/tools/gopls@latest
 ```
+
 </details>
 
 <details>
@@ -486,6 +503,7 @@ go install golang.org/x/tools/gopls@latest
 **Problem**: cclsp uses default TypeScript configuration only
 
 **Solution**: Check that:
+
 1. Your config file is named `cclsp.json` (not `cclsp.config.json`)
 2. The `CCLSP_CONFIG_PATH` environment variable points to the correct file
 3. The JSON syntax is valid
@@ -496,7 +514,8 @@ go install golang.org/x/tools/gopls@latest
 
 **Problem**: "Go to definition" returns no results
 
-**Solution**: 
+**Solution**:
+
 1. Ensure the file is saved and part of the project
 2. Check that the language server supports the file type
 3. Some language servers need a few seconds to index the project
@@ -509,6 +528,7 @@ We welcome contributions! Here's how you can help:
 ### Reporting Issues
 
 Found a bug or have a feature request? [Open an issue](https://github.com/ktnyt/cclsp/issues) with:
+
 - Clear description of the problem
 - Steps to reproduce
 - Expected vs actual behavior
@@ -516,7 +536,7 @@ Found a bug or have a feature request? [Open an issue](https://github.com/ktnyt/
 
 ### Adding Language Support
 
-Want to add support for a new language? 
+Want to add support for a new language?
 
 1. Find the LSP server for your language
 2. Test the configuration locally
