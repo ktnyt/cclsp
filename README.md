@@ -11,6 +11,36 @@ MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) 
 
 [![asciicast](https://asciinema.org/a/njOXqflftQBcvPhAkH6gLvVXY.svg)](https://asciinema.org/a/njOXqflftQBcvPhAkH6gLvVXY)
 
+## Table of Contents
+
+- [Why cclsp?](#why-cclsp)
+- [Features](#features)
+- [📋 Prerequisites](#-prerequisites)
+- [📦 Installation](#-installation)
+  - [From npm (Recommended)](#from-npm-recommended)
+  - [From Source](#from-source)
+- [⚡ Setup](#-setup)
+  - [Automated Setup (Recommended)](#automated-setup-recommended)
+  - [Claude Code Quick Setup](#claude-code-quick-setup)
+  - [Manual Setup](#manual-setup)
+  - [Language Server Installation](#language-server-installation)
+  - [Verification](#verification)
+- [🚀 Usage](#-usage)
+  - [As MCP Server](#as-mcp-server)
+  - [Configuration](#configuration)
+- [🛠️ Development](#️-development)
+- [🔧 MCP Tools](#-mcp-tools)
+  - [`find_definition`](#find_definition)
+  - [`find_references`](#find_references)
+  - [`rename_symbol`](#rename_symbol)
+- [💡 Real-world Examples](#-real-world-examples)
+  - [Finding Function Definitions](#finding-function-definitions)
+  - [Finding All References](#finding-all-references)
+  - [Renaming Symbols](#renaming-symbols)
+- [🔍 Troubleshooting](#-troubleshooting)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
 ## Why cclsp?
 
 When using AI-powered coding assistants like Claude, you often need to navigate codebases to understand symbol relationships. **cclsp** bridges the gap between Language Server Protocol capabilities and Model Context Protocol, enabling:
@@ -31,12 +61,12 @@ When using AI-powered coding assistants like Claude, you often need to navigate 
 - **Go**: Support via gopls
 - **And many more**: Extensive language server configurations
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Node.js 18+ or Bun runtime
 - Language servers for your target languages (installed separately)
 
-## Installation
+## 📦 Installation
 
 ### From npm (Recommended)
 
@@ -61,11 +91,11 @@ bun run build
 bun run start
 ```
 
-## Setup
+## ⚡ Setup
 
 cclsp provides an interactive setup wizard that automates the entire configuration process. Choose your preferred method:
 
-### 🚀 Automated Setup (Recommended)
+### Automated Setup (Recommended)
 
 Run the interactive setup wizard:
 
@@ -91,7 +121,7 @@ The setup wizard will:
 - **Project Configuration** (default): Creates `.claude/cclsp.json` in current directory
 - **User Configuration** (`--user`): Creates global config in `~/.config/claude/cclsp.json`
 
-### 🎯 Claude Code Quick Setup
+### Claude Code Quick Setup
 
 For Claude Code users, the simplest approach:
 
@@ -103,7 +133,7 @@ npx cclsp setup
 # claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/config
 ```
 
-### 📋 Manual Setup
+### Manual Setup
 
 If you prefer manual configuration:
 
@@ -127,7 +157,7 @@ If you prefer manual configuration:
    claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/cclsp.json
    ```
 
-### 🔧 Language Server Installation
+### Language Server Installation
 
 The setup wizard shows installation commands for each LSP, but you can also install them manually:
 
@@ -181,7 +211,7 @@ For more languages and detailed instructions, run `npx cclsp setup` and select "
 
 </details>
 
-### ✅ Verification
+### Verification
 
 After setup, verify cclsp is working:
 
@@ -195,7 +225,7 @@ After setup, verify cclsp is working:
    - Ask Claude to find a function definition
    - Verify the `find_definition` tool appears
 
-## Usage
+## 🚀 Usage
 
 ### As MCP Server
 
@@ -331,7 +361,7 @@ Alternatively, create an `cclsp.json` configuration file manually:
 ```
 </details>
 
-## Development
+## 🛠️ Development
 
 ```bash
 # Run in development mode
@@ -353,7 +383,7 @@ bun run format
 bun run typecheck
 ```
 
-## MCP Tools
+## 🔧 MCP Tools
 
 The server exposes these MCP tools:
 
@@ -386,7 +416,7 @@ Rename a symbol at a specific position in a file. Returns the file changes neede
 - `character`: Character position (0-based)
 - `new_name`: The new name for the symbol
 
-## Real-world Examples
+## 💡 Real-world Examples
 
 ### Finding Function Definitions
 
@@ -426,7 +456,7 @@ Claude: I'll rename `getUserData` to `fetchUserProfile`
 Result: 12 files will be updated with the new name
 ```
 
-## Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
@@ -470,7 +500,7 @@ go install golang.org/x/tools/gopls@latest
 3. Some language servers need a few seconds to index the project
 </details>
 
-## Contributing
+## 🤝 Contributing
 
 We welcome contributions! Here's how you can help:
 
@@ -503,6 +533,6 @@ Want to add support for a new language?
 6. Push: `git push origin feature/amazing-feature`
 7. Open a Pull Request
 
-## License
+## 📄 License
 
 MIT
