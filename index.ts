@@ -6,6 +6,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { LSPClient } from './src/lsp-client.js';
 
+// Handle setup subcommand
+if (process.argv.includes('setup')) {
+  const setupModule = await import('./src/setup.js');
+  process.exit(0);
+}
+
 const lspClient = new LSPClient();
 
 const server = new Server(

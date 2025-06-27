@@ -1,0 +1,4 @@
+[test]
+# Disable parallel test execution to prevent test interference
+# This ensures beforeEach hooks run properly before each test
+concurrency = 1

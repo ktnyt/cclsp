@@ -1,6 +1,6 @@
 {
   "name": "cclsp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP server for accessing LSP functionality",
   "main": "dist/index.js",
   "bin": {
@@ -8,13 +8,15 @@
   },
   "type": "module",
   "scripts": {
-    "build": "bun build --target=node --outdir=dist index.ts",
+    "build": "bun build --target=node --outdir=dist index.ts && bun build --target=node --outfile=dist/setup.js src/setup.ts",
+    "setup": "bun run src/setup.ts",
     "dev": "bun run --watch index.ts",
     "start": "node dist/index.js",
     "test": "bun test",
     "test:manual": "node test_mcp_client.cjs",
     "lint": "biome check .",
-    "lint:fix": "biome check --write .",
+    "lint:fix": "biome check --fix .",
+    "lint:fix-unsafe": "biome check --fix --unsafe .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run test && npm run typecheck"
@@ -46,7 +48,9 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",
+    "@types/inquirer": "^9.0.8",
     "ignore": "^7.0.5",
+    "inquirer": "^12.6.3",
     "typescript-language-server": "^4.3.4"
   },
   "devDependencies": {

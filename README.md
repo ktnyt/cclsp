@@ -61,25 +61,139 @@ bun run build
 bun run start
 ```
 
-### Quick Start
+## Setup
 
-1. Install cclsp and a language server:
+cclsp provides an interactive setup wizard that automates the entire configuration process. Choose your preferred method:
+
+### 🚀 Automated Setup (Recommended)
+
+Run the interactive setup wizard:
+
 ```bash
-npm install -g cclsp typescript-language-server
+# One-time setup (no installation required)
+npx cclsp setup
+
+# For user-wide configuration
+npx cclsp setup --user
 ```
 
-2. Add to your MCP client configuration:
-```json
-{
-  "mcpServers": {
-    "cclsp": {
-      "command": "cclsp"
-    }
-  }
-}
+The setup wizard will:
+
+1. **🔍 Auto-detect languages** in your project by scanning files
+2. **📋 Show pre-selected LSP servers** based on detected languages  
+3. **📦 Display installation requirements** with detailed guides
+4. **⚡ Install LSPs automatically** (optional, with user confirmation)
+5. **🔗 Add to Claude MCP** (optional, with user confirmation)
+6. **✅ Verify setup** and show available tools
+
+#### Setup Options
+
+- **Project Configuration** (default): Creates `.claude/cclsp.json` in current directory
+- **User Configuration** (`--user`): Creates global config in `~/.config/claude/cclsp.json`
+
+### 🎯 Claude Code Quick Setup
+
+For Claude Code users, the simplest approach:
+
+```bash
+# Run setup and follow the prompts
+npx cclsp setup
+
+# The wizard will ask if you want to run this automatically:
+# claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/config
 ```
 
-3. Start using LSP features in your MCP client!
+### 📋 Manual Setup
+
+If you prefer manual configuration:
+
+1. **Install cclsp**:
+   ```bash
+   npm install -g cclsp
+   ```
+
+2. **Install language servers** (see [Language Server Installation](#language-server-installation))
+
+3. **Create configuration file**:
+   ```bash
+   # Use the interactive generator
+   cclsp setup
+   
+   # Or create manually (see Configuration section)
+   ```
+
+4. **Add to Claude MCP**:
+   ```bash
+   claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/cclsp.json
+   ```
+
+### 🔧 Language Server Installation
+
+The setup wizard shows installation commands for each LSP, but you can also install them manually:
+
+<details>
+<summary>📦 Common Language Servers</summary>
+
+#### TypeScript/JavaScript
+```bash
+npm install -g typescript-language-server typescript
+```
+
+#### Python
+```bash
+pip install "python-lsp-server[all]"
+# Or basic installation: pip install python-lsp-server
+```
+
+#### Go
+```bash
+go install golang.org/x/tools/gopls@latest
+```
+
+#### Rust
+```bash
+rustup component add rust-analyzer
+rustup component add rust-src
+```
+
+#### C/C++
+```bash
+# Ubuntu/Debian
+sudo apt install clangd
+
+# macOS
+brew install llvm
+
+# Windows: Download from LLVM releases
+```
+
+#### Ruby
+```bash
+gem install solargraph
+```
+
+#### PHP
+```bash
+npm install -g intelephense
+```
+
+For more languages and detailed instructions, run `npx cclsp setup` and select "Show detailed installation guides".
+
+</details>
+
+### ✅ Verification
+
+After setup, verify cclsp is working:
+
+1. **Check configuration**:
+   ```bash
+   npx cclsp --help
+   ```
+
+2. **Test in Claude Code**:
+   - Open a code file
+   - Ask Claude to find a function definition
+   - Verify the `find_definition` tool appears
 
 ## Usage
 
@@ -120,7 +234,34 @@ Configure in your MCP client (e.g., Claude Code):
 
 ### Configuration
 
-Create an `cclsp.json` configuration file:
+#### Interactive Configuration Generator
+
+For easy setup, use the interactive configuration generator:
+
+```bash
+# Using npx (recommended for one-time setup)
+npx cclsp setup
+
+# If installed globally
+cclsp setup
+
+# Or run directly with the development version
+bun run setup
+```
+
+The interactive tool will:
+- Show you all available language servers
+- Let you select which ones to configure with intuitive controls:
+  - **Navigation**: ↑/↓ arrow keys or Ctrl+P/Ctrl+N (Emacs-style)
+  - **Selection**: Space to toggle, A to toggle all, I to invert selection
+  - **Confirm**: Enter to proceed
+- Display installation instructions for your selected languages
+- Generate the configuration file automatically
+- Show you the final configuration
+
+#### Manual Configuration
+
+Alternatively, create an `cclsp.json` configuration file manually:
 
 ```json
 {

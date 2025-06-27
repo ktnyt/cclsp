@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Interactive configuration generator with `cclsp setup` command
+- Support for 15 language servers (TypeScript, Python, Go, Rust, C/C++, Java, Ruby, PHP, C#, Swift, Kotlin, Dart, Elixir, Haskell, Lua)
+- Emacs-style keyboard navigation (Ctrl+P/Ctrl+N) for setup interface
+- Automatic installation instructions display for selected language servers
+- Configuration file preview and validation
+- Comprehensive test suite for setup functionality
 - GitHub issue templates for bug reports, feature requests, language support, and questions
 - `CONTRIBUTING.md` with detailed contribution guidelines
 - `CODE_OF_CONDUCT.md` following Contributor Covenant

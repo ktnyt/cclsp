@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { constants, access, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import ignore from 'ignore';
+import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import type {
   Config,
   LSPError,
@@ -23,6 +24,7 @@ interface LSPMessage {
 interface ServerState {
   process: ChildProcess;
   initialized: boolean;
+  initializationPromise: Promise<void>;
   openFiles: Set<string>;
 }
 
@@ -62,25 +64,23 @@ export class LSPClient {
       }
     }
 
-    // Try to load from config file if no env var is set
+    // configPath must be provided if CCLSP_CONFIG_PATH is not set
+    if (!configPath) {
+      process.stderr.write(
+        'Error: configPath is required when CCLSP_CONFIG_PATH environment variable is not set\n'
+      );
+      process.exit(1);
+    }
+
+    // Try to load from config file
     try {
-      const defaultConfigPath = configPath || join(process.cwd(), 'cclsp.config.json');
-      process.stderr.write(`Loading config from file: ${defaultConfigPath}\n`);
-      const configData = readFileSync(defaultConfigPath, 'utf-8');
+      process.stderr.write(`Loading config from file: ${configPath}\n`);
+      const configData = readFileSync(configPath, 'utf-8');
       this.config = JSON.parse(configData);
       process.stderr.write(`Loaded ${this.config.servers.length} server configurations\n`);
     } catch (error) {
-      // Default configuration if no config found
-      this.config = {
-        servers: [
-          {
-            extensions: ['ts', 'js', 'tsx', 'jsx'],
-            command: ['npx', '--', 'typescript-language-server', '--stdio'],
-            rootDir: '.',
-          },
-        ],
-      };
-      process.stderr.write(`Using default config. Config error: ${error}\n`);
+      process.stderr.write(`Failed to load config from ${configPath}: ${error}\n`);
+      process.exit(1);
     }
   }
 
@@ -114,9 +114,15 @@ export class LSPClient {
       cwd: serverConfig.rootDir || process.cwd(),
     });
 
+    let initializationResolve: (() => void) | undefined;
+    const initializationPromise = new Promise<void>((resolve) => {
+      initializationResolve = resolve;
+    });
+
     const serverState: ServerState = {
       process: childProcess,
       initialized: false,
+      initializationPromise,
       openFiles: new Set(),
     };
 
@@ -186,10 +192,8 @@ export class LSPClient {
 
     await this.sendNotification(childProcess, 'initialized', {});
 
-    // Wait a bit for the server to fully initialize
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     serverState.initialized = true;
+    initializationResolve?.();
     return serverState;
   }
 
@@ -343,6 +347,9 @@ export class LSPClient {
   async findDefinition(filePath: string, position: Position): Promise<Location[]> {
     const serverState = await this.getServer(filePath);
 
+    // Wait for the server to be fully initialized
+    await serverState.initializationPromise;
+
     // Ensure the file is opened and synced with the LSP server
     await this.ensureFileOpen(serverState, filePath);
 
@@ -377,6 +384,9 @@ export class LSPClient {
   ): Promise<Location[]> {
     const serverState = await this.getServer(filePath);
 
+    // Wait for the server to be fully initialized
+    await serverState.initializationPromise;
+
     // Ensure the file is opened and synced with the LSP server
     await this.ensureFileOpen(serverState, filePath);
 
@@ -405,6 +415,9 @@ export class LSPClient {
   }> {
     const serverState = await this.getServer(filePath);
 
+    // Wait for the server to be fully initialized
+    await serverState.initializationPromise;
+
     // Ensure the file is opened and synced with the LSP server
     await this.ensureFileOpen(serverState, filePath);
 
@@ -426,97 +439,16 @@ export class LSPClient {
     return {};
   }
 
-  private loadGitignore(projectDir: string): ReturnType<typeof ignore> {
-    const ig = ignore();
-
-    // Add common ignore patterns
-    ig.add([
-      'node_modules',
-      'dist',
-      'build',
-      '.git',
-      '.DS_Store',
-      '*.log',
-      '.env*',
-      'coverage',
-      '.nyc_output',
-      'tmp',
-      'temp',
-    ]);
-
-    // Load .gitignore if exists
-    const gitignorePath = join(projectDir, '.gitignore');
-    if (existsSync(gitignorePath)) {
-      try {
-        const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
-        ig.add(gitignoreContent);
-        process.stderr.write('Loaded .gitignore patterns\n');
-      } catch (error) {
-        process.stderr.write(`Failed to read .gitignore: ${error}\n`);
-      }
+  async preloadServers(projectDir: string = process.cwd(), debug = true): Promise<void> {
+    if (debug) {
+      process.stderr.write(`Scanning project directory for supported file types: ${projectDir}\n`);
     }
 
-    return ig;
-  }
-
-  private scanDirectoryForExtensions(
-    dirPath: string,
-    projectDir: string,
-    ig: ReturnType<typeof ignore>,
-    maxDepth = 3,
-    currentDepth = 0
-  ): Set<string> {
-    const foundExtensions = new Set<string>();
-
-    if (currentDepth >= maxDepth) {
-      return foundExtensions;
+    const ig = await loadGitignore(projectDir);
+    const foundExtensions = await scanDirectoryForExtensions(projectDir, 3, ig, debug);
+    if (debug) {
+      process.stderr.write(`Found extensions: ${Array.from(foundExtensions).join(', ')}\n`);
     }
-
-    try {
-      const entries = readdirSync(dirPath);
-
-      for (const entry of entries) {
-        const fullPath = join(dirPath, entry);
-        const relativePath = relative(projectDir, fullPath);
-
-        // Skip if ignored by gitignore
-        if (ig.ignores(relativePath)) {
-          continue;
-        }
-
-        const stat = statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          const subExtensions = this.scanDirectoryForExtensions(
-            fullPath,
-            projectDir,
-            ig,
-            maxDepth,
-            currentDepth + 1
-          );
-          for (const ext of subExtensions) {
-            foundExtensions.add(ext);
-          }
-        } else if (stat.isFile()) {
-          const extension = entry.split('.').pop();
-          if (extension) {
-            foundExtensions.add(extension);
-          }
-        }
-      }
-    } catch (error) {
-      process.stderr.write(`Error scanning directory ${dirPath}: ${error}\n`);
-    }
-
-    return foundExtensions;
-  }
-
-  async preloadServers(projectDir: string = process.cwd()): Promise<void> {
-    process.stderr.write(`Scanning project directory for supported file types: ${projectDir}\n`);
-
-    const ig = this.loadGitignore(projectDir);
-    const foundExtensions = this.scanDirectoryForExtensions(projectDir, projectDir, ig);
-    process.stderr.write(`Found extensions: ${Array.from(foundExtensions).join(', ')}\n`);
 
     const serversToStart = new Set<LSPServerConfig>();
 
@@ -529,18 +461,24 @@ export class LSPClient {
       }
     }
 
-    process.stderr.write(`Starting ${serversToStart.size} LSP servers...\n`);
+    if (debug) {
+      process.stderr.write(`Starting ${serversToStart.size} LSP servers...\n`);
+    }
 
     const startPromises = Array.from(serversToStart).map(async (serverConfig) => {
       try {
         const key = JSON.stringify(serverConfig);
         if (!this.servers.has(key)) {
-          process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
+          if (debug) {
+            process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
+          }
           const serverState = await this.startServer(serverConfig);
           this.servers.set(key, serverState);
-          process.stderr.write(
-            `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
-          );
+          if (debug) {
+            process.stderr.write(
+              `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
+            );
+          }
         }
       } catch (error) {
         process.stderr.write(
@@ -550,7 +488,9 @@ export class LSPClient {
     });
 
     await Promise.all(startPromises);
-    process.stderr.write('LSP server preloading completed\n');
+    if (debug) {
+      process.stderr.write('LSP server preloading completed\n');
+    }
   }
 
   dispose(): void {
