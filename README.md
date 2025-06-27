@@ -9,7 +9,9 @@
 
 MCP (Model Context Protocol) server that bridges Language Server Protocol (LSP) functionality to MCP tools. It allows MCP clients to access LSP features like "go to definition", "find references", and "rename symbol" through a standardized interface.
 
-[![asciicast](https://asciinema.org/a/njOXqflftQBcvPhAkH6gLvVXY.svg)](https://asciinema.org/a/njOXqflftQBcvPhAkH6gLvVXY)
+## Setup & Usage Demo
+
+https://github.com/user-attachments/assets/843dff6b-8103-481a-8736-78a3605fc53c
 
 ## Table of Contents
 
