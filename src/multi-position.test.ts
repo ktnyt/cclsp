@@ -245,7 +245,7 @@ async function handleMultiPositionToolCall(
           for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
             const filePath = uri.replace('file://', '');
             changes.push(`File: ${filePath}`);
-            for (const edit of edits) {
+            for (const edit of edits as any[]) {
               const { start, end } = edit.range;
               changes.push(
                 `  - Line ${start.line + 1}, Column ${start.character + 1} to Line ${end.line + 1}, Column ${end.character + 1}: "${edit.newText}"`
@@ -317,8 +317,8 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toContain('Results for line-1/character-1 (4:9)');
-      expect(response.content[0].text).toContain('/test.ts:11:6');
+      expect(response.content[0]?.text).toContain('Results for line-1/character-1 (4:9)');
+      expect(response.content[0]?.text).toContain('/test.ts:11:6');
     });
 
     it('should find results in multiple position variations and return all', async () => {
@@ -355,10 +355,10 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toContain('Results for line-1/character-1 (4:9)');
-      expect(response.content[0].text).toContain('/test.ts:11:6');
-      expect(response.content[0].text).toContain('Results for line/character-1 (5:9)');
-      expect(response.content[0].text).toContain('/other.ts:16:9');
+      expect(response.content[0]?.text).toContain('Results for line-1/character-1 (4:9)');
+      expect(response.content[0]?.text).toContain('/test.ts:11:6');
+      expect(response.content[0]?.text).toContain('Results for line/character-1 (5:9)');
+      expect(response.content[0]?.text).toContain('/other.ts:16:9');
     });
 
     it('should return error message when no position variations have results', async () => {
@@ -374,7 +374,7 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toBe(
+      expect(response.content[0]?.text).toBe(
         'No definition found at any position variation around line 5, character 10. Please verify the symbol location and ensure the language server is properly configured.'
       );
     });
@@ -406,8 +406,8 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toContain('Results for line-1/character-1 (4:10)');
-      expect(response.content[0].text).toContain('/test.ts:21:4');
+      expect(response.content[0]?.text).toContain('Results for line-1/character-1 (4:10)');
+      expect(response.content[0]?.text).toContain('/test.ts:21:4');
     });
 
     it('should return error message when no references found', async () => {
@@ -423,7 +423,7 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toBe(
+      expect(response.content[0]?.text).toBe(
         'No references found at any position variation around line 5, character 10. Please verify the symbol location and ensure the language server is properly configured.'
       );
     });
@@ -455,9 +455,9 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toContain('Results for line-1/character-1 (5:10)');
-      expect(response.content[0].text).toContain('File: /test.ts');
-      expect(response.content[0].text).toContain(
+      expect(response.content[0]?.text).toContain('Results for line-1/character-1 (5:10)');
+      expect(response.content[0]?.text).toContain('File: /test.ts');
+      expect(response.content[0]?.text).toContain(
         'Line 6, Column 11 to Line 6, Column 21: "newSymbolName"'
       );
     });
@@ -476,7 +476,7 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toBe(
+      expect(response.content[0]?.text).toBe(
         'No rename edits available at any position variation around line 5, character 10. Please verify the symbol location and ensure the language server is properly configured.'
       );
     });
@@ -516,8 +516,8 @@ describe('Multi-Position Tool Calls', () => {
         mockLspClient
       );
 
-      expect(response.content[0].text).toContain('Results for line/character-1 (5:9)');
-      expect(response.content[0].text).toContain('/test.ts:11:6');
+      expect(response.content[0]?.text).toContain('Results for line/character-1 (5:9)');
+      expect(response.content[0]?.text).toContain('/test.ts:11:6');
     });
   });
 });
