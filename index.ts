@@ -45,7 +45,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'find_definition',
         description:
-          'Find the definition of a symbol at a specific position in a file. Returns line/character numbers as 1-based for human readability.',
+          'Find the definition of a symbol at a specific position in a file. Automatically tries multiple position combinations to find the best match.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -55,19 +55,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description:
-                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
+              description: 'The line number',
             },
             character: {
               type: 'number',
-              description:
-                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
-            },
-            use_zero_index: {
-              type: 'boolean',
-              description:
-                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
-              default: false,
+              description: 'The character position in the line',
             },
           },
           required: ['file_path', 'line', 'character'],
@@ -76,7 +68,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'find_references',
         description:
-          'Find all references to a symbol at a specific position in a file. Returns line/character numbers as 1-based for human readability.',
+          'Find all references to a symbol at a specific position in a file. Automatically tries multiple position combinations to find the best match.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -86,24 +78,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description:
-                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
+              description: 'The line number',
             },
             character: {
               type: 'number',
-              description:
-                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
+              description: 'The character position in the line',
             },
             include_declaration: {
               type: 'boolean',
               description: 'Whether to include the declaration',
               default: true,
-            },
-            use_zero_index: {
-              type: 'boolean',
-              description:
-                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
-              default: false,
             },
           },
           required: ['file_path', 'line', 'character'],
@@ -112,7 +96,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'rename_symbol',
         description:
-          'Rename a symbol at a specific position in a file. Returns the file changes needed to rename the symbol across the codebase.',
+          'Rename a symbol at a specific position in a file. Automatically tries multiple position combinations to find the best match.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -122,23 +106,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description:
-                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
+              description: 'The line number',
             },
             character: {
               type: 'number',
-              description:
-                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
+              description: 'The character position in the line',
             },
             new_name: {
               type: 'string',
               description: 'The new name for the symbol',
-            },
-            use_zero_index: {
-              type: 'boolean',
-              description:
-                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
-              default: false,
             },
           },
           required: ['file_path', 'line', 'character', 'new_name'],
@@ -153,50 +129,73 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === 'find_definition') {
-      const {
-        file_path,
-        line,
-        character,
-        use_zero_index = false,
-      } = args as {
+      const { file_path, line, character } = args as {
         file_path: string;
         line: number;
         character: number;
-        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
-      const adjustedLine = use_zero_index ? line : line - 1;
-      const adjustedCharacter = use_zero_index ? character : character - 1;
-      const locations = await lspClient.findDefinition(absolutePath, {
-        line: adjustedLine,
-        character: adjustedCharacter,
-      });
+      // Try multiple position combinations
+      const positionCandidates = [
+        {
+          line: line - 1,
+          character: character - 1,
+          description: `line-1/character-1 (${line - 1}:${character - 1})`,
+        },
+        {
+          line: line,
+          character: character - 1,
+          description: `line/character-1 (${line}:${character - 1})`,
+        },
+        {
+          line: line - 1,
+          character: character,
+          description: `line-1/character (${line - 1}:${character})`,
+        },
+        { line: line, character: character, description: `line/character (${line}:${character})` },
+      ];
 
-      if (locations.length === 0) {
+      const results = [];
+      for (const candidate of positionCandidates) {
+        try {
+          const locations = await lspClient.findDefinition(absolutePath, {
+            line: candidate.line,
+            character: candidate.character,
+          });
+
+          if (locations.length > 0) {
+            const locationResults = locations
+              .map((loc) => {
+                const filePath = loc.uri.replace('file://', '');
+                const { start, end } = loc.range;
+                return `${filePath}:${start.line + 1}:${start.character + 1}`;
+              })
+              .join('\n');
+
+            results.push(`Results for ${candidate.description}:\n${locationResults}`);
+          }
+        } catch (error) {
+          // Continue trying other positions if one fails
+        }
+      }
+
+      if (results.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: 'No definition found',
+              text: `No definition found at any position variation around line ${line}, character ${character}. Please verify the symbol location and ensure the language server is properly configured.`,
             },
           ],
         };
       }
 
-      const results = locations
-        .map((loc) => {
-          const filePath = loc.uri.replace('file://', '');
-          const { start, end } = loc.range;
-          return `${filePath}:${start.line + 1}:${start.character + 1}`;
-        })
-        .join('\n');
-
       return {
         content: [
           {
             type: 'text',
-            text: `Definition found:\n${results}`,
+            text: results.join('\n\n'),
           },
         ],
       };
@@ -208,105 +207,154 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         line,
         character,
         include_declaration = true,
-        use_zero_index = false,
       } = args as {
         file_path: string;
         line: number;
         character: number;
         include_declaration?: boolean;
-        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
-      const adjustedLine = use_zero_index ? line : line - 1;
-      const adjustedCharacter = use_zero_index ? character : character - 1;
-      const locations = await lspClient.findReferences(
-        absolutePath,
-        { line: adjustedLine, character: adjustedCharacter },
-        include_declaration
-      );
+      // Try multiple position combinations
+      const positionCandidates = [
+        {
+          line: line - 1,
+          character: character - 1,
+          description: `line-1/character-1 (${line - 1}:${character - 1})`,
+        },
+        {
+          line: line,
+          character: character - 1,
+          description: `line/character-1 (${line}:${character - 1})`,
+        },
+        {
+          line: line - 1,
+          character: character,
+          description: `line-1/character (${line - 1}:${character})`,
+        },
+        { line: line, character: character, description: `line/character (${line}:${character})` },
+      ];
 
-      if (locations.length === 0) {
+      const results = [];
+      for (const candidate of positionCandidates) {
+        try {
+          const locations = await lspClient.findReferences(
+            absolutePath,
+            { line: candidate.line, character: candidate.character },
+            include_declaration
+          );
+
+          if (locations.length > 0) {
+            const locationResults = locations
+              .map((loc) => {
+                const filePath = loc.uri.replace('file://', '');
+                const { start, end } = loc.range;
+                return `${filePath}:${start.line + 1}:${start.character + 1}`;
+              })
+              .join('\n');
+
+            results.push(`Results for ${candidate.description}:\n${locationResults}`);
+          }
+        } catch (error) {
+          // Continue trying other positions if one fails
+        }
+      }
+
+      if (results.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: 'No references found',
+              text: `No references found at any position variation around line ${line}, character ${character}. Please verify the symbol location and ensure the language server is properly configured.`,
             },
           ],
         };
       }
 
-      const results = locations
-        .map((loc) => {
-          const filePath = loc.uri.replace('file://', '');
-          const { start, end } = loc.range;
-          return `${filePath}:${start.line + 1}:${start.character + 1}`;
-        })
-        .join('\n');
-
       return {
         content: [
           {
             type: 'text',
-            text: `References found:\n${results}`,
+            text: results.join('\n\n'),
           },
         ],
       };
     }
 
     if (name === 'rename_symbol') {
-      const {
-        file_path,
-        line,
-        character,
-        new_name,
-        use_zero_index = false,
-      } = args as {
+      const { file_path, line, character, new_name } = args as {
         file_path: string;
         line: number;
         character: number;
         new_name: string;
-        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
-      const adjustedLine = use_zero_index ? line : line - 1;
-      const adjustedCharacter = use_zero_index ? character : character - 1;
-      const workspaceEdit = await lspClient.renameSymbol(
-        absolutePath,
-        { line: adjustedLine, character: adjustedCharacter },
-        new_name
-      );
+      // Try multiple position combinations
+      const positionCandidates = [
+        {
+          line: line - 1,
+          character: character - 1,
+          description: `line-1/character-1 (${line - 1}:${character - 1})`,
+        },
+        {
+          line: line,
+          character: character - 1,
+          description: `line/character-1 (${line}:${character - 1})`,
+        },
+        {
+          line: line - 1,
+          character: character,
+          description: `line-1/character (${line - 1}:${character})`,
+        },
+        { line: line, character: character, description: `line/character (${line}:${character})` },
+      ];
 
-      if (!workspaceEdit || !workspaceEdit.changes) {
+      const results = [];
+      for (const candidate of positionCandidates) {
+        try {
+          const workspaceEdit = await lspClient.renameSymbol(
+            absolutePath,
+            { line: candidate.line, character: candidate.character },
+            new_name
+          );
+
+          if (workspaceEdit?.changes && Object.keys(workspaceEdit.changes).length > 0) {
+            const changes = [];
+            for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
+              const filePath = uri.replace('file://', '');
+              changes.push(`File: ${filePath}`);
+              for (const edit of edits) {
+                const { start, end } = edit.range;
+                changes.push(
+                  `  - Line ${start.line + 1}, Column ${start.character + 1} to Line ${end.line + 1}, Column ${end.character + 1}: "${edit.newText}"`
+                );
+              }
+            }
+
+            results.push(`Results for ${candidate.description}:\n${changes.join('\n')}`);
+          }
+        } catch (error) {
+          // Continue trying other positions if one fails
+        }
+      }
+
+      if (results.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: 'No rename edits available',
+              text: `No rename edits available at any position variation around line ${line}, character ${character}. Please verify the symbol location and ensure the language server is properly configured.`,
             },
           ],
         };
-      }
-
-      const changes = [];
-      for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
-        const filePath = uri.replace('file://', '');
-        changes.push(`File: ${filePath}`);
-        for (const edit of edits) {
-          const { start, end } = edit.range;
-          changes.push(
-            `  - Line ${start.line + 1}, Column ${start.character + 1} to Line ${end.line + 1}, Column ${end.character + 1}: "${edit.newText}"`
-          );
-        }
       }
 
       return {
         content: [
           {
             type: 'text',
-            text: `Rename edits:\n${changes.join('\n')}`,
+            text: results.join('\n\n'),
           },
         ],
       };
