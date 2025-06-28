@@ -298,4 +298,141 @@ describe('LSPClient', () => {
       sendRequestSpy.mockRestore();
     });
   });
+
+  describe('Symbol kind fallback functionality', () => {
+    it('should return fallback results when specified symbol kind not found', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock getDocumentSymbols to return test symbols
+      const mockSymbols = [
+        {
+          name: 'testFunction',
+          kind: 12, // Function
+          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
+          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 21 } },
+        },
+        {
+          name: 'testVariable',
+          kind: 13, // Variable
+          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 20 } },
+          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 18 } },
+        },
+      ];
+
+      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+        mockSymbols
+      );
+
+      // Search for 'testFunction' with kind 'class' (should not match, then fallback to all kinds)
+      const result = await client.findSymbolsByName('test.ts', 'testFunction', 'class');
+
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]?.name).toBe('testFunction');
+      expect(result.matches[0]?.kind).toBe(12); // Function
+      expect(result.warning).toContain('No symbols found with kind "class"');
+      expect(result.warning).toContain(
+        'Found 1 symbol(s) with name "testFunction" of other kinds: function'
+      );
+
+      getDocumentSymbolsSpy.mockRestore();
+    });
+
+    it('should return multiple fallback results of different kinds', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock getDocumentSymbols to return symbols with same name but different kinds
+      const mockSymbols = [
+        {
+          name: 'test',
+          kind: 12, // Function
+          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
+          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 13 } },
+        },
+        {
+          name: 'test',
+          kind: 13, // Variable
+          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 15 } },
+          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 10 } },
+        },
+        {
+          name: 'test',
+          kind: 5, // Class
+          range: { start: { line: 5, character: 0 }, end: { line: 10, character: 1 } },
+          selectionRange: { start: { line: 5, character: 6 }, end: { line: 5, character: 10 } },
+        },
+      ];
+
+      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+        mockSymbols
+      );
+
+      // Search for 'test' with kind 'interface' (should not match, then fallback to all kinds)
+      const result = await client.findSymbolsByName('test.ts', 'test', 'interface');
+
+      expect(result.matches).toHaveLength(3);
+      expect(result.warning).toContain('No symbols found with kind "interface"');
+      expect(result.warning).toContain(
+        'Found 3 symbol(s) with name "test" of other kinds: function, variable, class'
+      );
+
+      getDocumentSymbolsSpy.mockRestore();
+    });
+
+    it('should not trigger fallback when correct symbol kind is found', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockSymbols = [
+        {
+          name: 'testFunction',
+          kind: 12, // Function
+          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
+          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 21 } },
+        },
+        {
+          name: 'testVariable',
+          kind: 13, // Variable
+          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 20 } },
+          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 18 } },
+        },
+      ];
+
+      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+        mockSymbols
+      );
+
+      // Search for 'testFunction' with correct kind 'function'
+      const result = await client.findSymbolsByName('test.ts', 'testFunction', 'function');
+
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]?.name).toBe('testFunction');
+      expect(result.warning).toBeUndefined(); // No warning expected
+
+      getDocumentSymbolsSpy.mockRestore();
+    });
+
+    it('should return empty results when no symbols found even with fallback', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockSymbols = [
+        {
+          name: 'otherFunction',
+          kind: 12, // Function
+          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
+          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 22 } },
+        },
+      ];
+
+      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+        mockSymbols
+      );
+
+      // Search for non-existent symbol
+      const result = await client.findSymbolsByName('test.ts', 'nonExistentSymbol', 'function');
+
+      expect(result.matches).toHaveLength(0);
+      expect(result.warning).toBeUndefined(); // No fallback triggered since no name matches found
+
+      getDocumentSymbolsSpy.mockRestore();
+    });
+  });
 });

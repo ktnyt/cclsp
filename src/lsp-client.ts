@@ -871,7 +871,60 @@ export class LSPClient {
     }
 
     process.stderr.write(`[DEBUG findSymbolsByName] Found ${matches.length} matching symbols\n`);
-    return { matches, warning: validationWarning };
+
+    // If a specific symbol kind was requested but no matches found, try searching all kinds as fallback
+    let fallbackWarning: string | undefined;
+    if (effectiveSymbolKind && matches.length === 0) {
+      process.stderr.write(
+        `[DEBUG findSymbolsByName] No matches found for kind "${effectiveSymbolKind}", trying fallback search for all kinds\n`
+      );
+
+      const fallbackMatches: SymbolMatch[] = [];
+
+      if (this.isDocumentSymbolArray(symbols)) {
+        const flatSymbols = this.flattenDocumentSymbols(symbols);
+        for (const symbol of flatSymbols) {
+          const nameMatches = symbol.name === symbolName || symbol.name.includes(symbolName);
+          if (nameMatches) {
+            fallbackMatches.push({
+              name: symbol.name,
+              kind: symbol.kind,
+              position: symbol.selectionRange.start,
+              range: symbol.range,
+              detail: symbol.detail,
+            });
+          }
+        }
+      } else {
+        for (const symbol of symbols) {
+          const nameMatches = symbol.name === symbolName || symbol.name.includes(symbolName);
+          if (nameMatches) {
+            const position = await this.findSymbolPositionInFile(filePath, symbol);
+            fallbackMatches.push({
+              name: symbol.name,
+              kind: symbol.kind,
+              position: position,
+              range: symbol.location.range,
+              detail: undefined,
+            });
+          }
+        }
+      }
+
+      if (fallbackMatches.length > 0) {
+        const foundKinds = [
+          ...new Set(fallbackMatches.map((m) => this.symbolKindToString(m.kind))),
+        ];
+        fallbackWarning = `⚠️ No symbols found with kind "${effectiveSymbolKind}". Found ${fallbackMatches.length} symbol(s) with name "${symbolName}" of other kinds: ${foundKinds.join(', ')}.`;
+        matches.push(...fallbackMatches);
+        process.stderr.write(
+          `[DEBUG findSymbolsByName] Fallback search found ${fallbackMatches.length} additional matches\n`
+        );
+      }
+    }
+
+    const combinedWarning = [validationWarning, fallbackWarning].filter(Boolean).join(' ');
+    return { matches, warning: combinedWarning || undefined };
   }
 
   async preloadServers(projectDir: string = process.cwd(), debug = true): Promise<void> {
