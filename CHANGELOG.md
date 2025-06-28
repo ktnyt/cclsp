@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-06-28
+
+### Added
+
+- **Intelligent symbol kind fallback**: When a specific `symbol_kind` is specified but no matches are found, automatically search all symbol types and return results with descriptive warning messages
+- Enhanced user experience for LLM-based tools that may specify incorrect symbol kinds
+- Comprehensive test coverage for all fallback scenarios
+
+### Fixed
+
+- Improved robustness of symbol searches when exact kind matches are not available
+
 ## [0.4.0] - 2025-06-28
 
 ### Changed
