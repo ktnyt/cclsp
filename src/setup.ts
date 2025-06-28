@@ -346,7 +346,7 @@ async function main() {
     // Show Claude MCP setup instructions
     const absoluteConfigPath = resolve(configPath);
     const scopeFlag = isUser ? ' --scope user' : '';
-    const mcpCommand = `claude mcp add cclsp npx cclsp${scopeFlag} --env CCLSP_CONFIG_PATH=${absoluteConfigPath}`;
+    const mcpCommand = `claude mcp add cclsp npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${absoluteConfigPath}`;
 
     console.log('\n🔗 To use cclsp with Claude Code, add it to your MCP configuration:');
     console.log(mcpCommand);

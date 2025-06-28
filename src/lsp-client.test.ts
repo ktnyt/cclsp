@@ -298,4 +298,5 @@ describe('LSPClient', () => {
       sendRequestSpy.mockRestore();
     });
   });
+
 });

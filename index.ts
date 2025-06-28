@@ -60,7 +60,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             character: {
               type: 'number',
-              description: 'The character position in the line (0-based)',
+              description:
+                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             use_zero_index: {
               type: 'boolean',
@@ -90,7 +91,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             character: {
               type: 'number',
-              description: 'The character position in the line (0-based)',
+              description:
+                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             include_declaration: {
               type: 'boolean',
@@ -125,7 +127,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             character: {
               type: 'number',
-              description: 'The character position in the line (0-based)',
+              description:
+                'The character position in the line (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             new_name: {
               type: 'string',
@@ -164,9 +167,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const absolutePath = resolve(file_path);
 
       const adjustedLine = use_zero_index ? line : line - 1;
+      const adjustedCharacter = use_zero_index ? character : character - 1;
       const locations = await lspClient.findDefinition(absolutePath, {
         line: adjustedLine,
-        character,
+        character: adjustedCharacter,
       });
 
       if (locations.length === 0) {
@@ -215,9 +219,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const absolutePath = resolve(file_path);
 
       const adjustedLine = use_zero_index ? line : line - 1;
+      const adjustedCharacter = use_zero_index ? character : character - 1;
       const locations = await lspClient.findReferences(
         absolutePath,
-        { line: adjustedLine, character },
+        { line: adjustedLine, character: adjustedCharacter },
         include_declaration
       );
 
@@ -267,9 +272,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const absolutePath = resolve(file_path);
 
       const adjustedLine = use_zero_index ? line : line - 1;
+      const adjustedCharacter = use_zero_index ? character : character - 1;
       const workspaceEdit = await lspClient.renameSymbol(
         absolutePath,
-        { line: adjustedLine, character },
+        { line: adjustedLine, character: adjustedCharacter },
         new_name
       );
 

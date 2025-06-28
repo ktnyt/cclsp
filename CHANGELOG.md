@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-06-28
+
+### Fixed
+
+- Fixed setup command to use `npx cclsp@latest` instead of `npx cclsp` for MCP configuration
+- Updated all documentation to consistently use `npx cclsp@latest` for better version control
+
 ## [0.3.3] - 2025-06-28
 
 ### Changed
@@ -32,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `npx cclsp setup` command now executes properly without hanging
+- `npx cclsp@latest setup` command now executes properly without hanging
 - Setup subcommand execution flow and error handling
 - Eliminated duplicate execution when running setup via `node dist/index.js setup`
 - Streamlined build process by removing separate setup.js compilation
