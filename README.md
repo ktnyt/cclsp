@@ -11,7 +11,7 @@
 
 ## Setup & Usage Demo
 
-https://github.com/user-attachments/assets/843dff6b-8103-481a-8736-78a3605fc53c
+https://github.com/user-attachments/assets/52980f32-64d6-4b78-9cbf-18d6ae120cdd
 
 ## Table of Contents
 
