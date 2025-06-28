@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-06-28
+
+### Changed
+
+- MCP tools now use 1-based indexing by default for both line and character positions
+- Tool parameter `character` now defaults to 1-indexed (human-readable) instead of 0-indexed
+- Added `use_zero_index` parameter to all tools for backward compatibility with 0-based indexing
+- Updated tool descriptions to clearly indicate indexing behavior
+
+### Added
+
+- Comprehensive test coverage for 1-based and 0-based indexing behavior
+- Character position conversion tests for all MCP tools
+- Edge case testing for character indexing boundaries
+
 ## [0.3.2] - 2025-06-27
 
 ### Fixed
