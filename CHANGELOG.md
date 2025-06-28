@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-06-28
+
+### Changed
+
+- **BREAKING**: Complete redesign of MCP tool API from position-based to symbol name/kind-based lookup
+- `find_definition` now accepts `symbol_name` and `symbol_kind` instead of `line` and `character`
+- `find_references` now accepts `symbol_name` and `symbol_kind` instead of `line` and `character`
+- `rename_symbol` now accepts `symbol_name` and `symbol_kind` instead of `line` and `character`
+- Enhanced LSP stderr forwarding directly to MCP stderr for better debugging
+- Improved position accuracy for `SymbolInformation` with file content analysis
+
+### Added
+
+- `textDocument/documentSymbol` LSP functionality for comprehensive symbol discovery
+- Automatic symbol matching by name and kind for improved LLM accuracy
+- `rename_symbol_strict` tool for precise position-based renaming when multiple matches exist
+- Symbol kind validation with helpful error messages listing valid options
+- Comprehensive debug logging throughout the symbol resolution pipeline
+- File content analysis for precise symbol position detection in `SymbolInformation`
+- Enhanced pylsp configuration with jedi plugin settings for Python support
+- Invalid symbol kind warnings embedded in response text instead of breaking execution
+
+### Fixed
+
+- Position accuracy issues with Python Language Server (pylsp) symbol detection
+- Character position estimation for better symbol name targeting
+
 ## [0.3.5] - 2025-06-28
 
 ### Changed
