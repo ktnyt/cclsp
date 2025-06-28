@@ -55,11 +55,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description: 'The line number (0-based)',
+              description:
+                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             character: {
               type: 'number',
               description: 'The character position in the line (0-based)',
+            },
+            use_zero_index: {
+              type: 'boolean',
+              description:
+                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
+              default: false,
             },
           },
           required: ['file_path', 'line', 'character'],
@@ -78,7 +85,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description: 'The line number (0-based)',
+              description:
+                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             character: {
               type: 'number',
@@ -88,6 +96,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'boolean',
               description: 'Whether to include the declaration',
               default: true,
+            },
+            use_zero_index: {
+              type: 'boolean',
+              description:
+                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
+              default: false,
             },
           },
           required: ['file_path', 'line', 'character'],
@@ -106,7 +120,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             line: {
               type: 'number',
-              description: 'The line number (0-based)',
+              description:
+                'The line number (1-indexed by default; set use_zero_index to use 0-based indexing)',
             },
             character: {
               type: 'number',
@@ -115,6 +130,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             new_name: {
               type: 'string',
               description: 'The new name for the symbol',
+            },
+            use_zero_index: {
+              type: 'boolean',
+              description:
+                'If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input',
+              default: false,
             },
           },
           required: ['file_path', 'line', 'character', 'new_name'],
@@ -129,14 +150,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === 'find_definition') {
-      const { file_path, line, character } = args as {
+      const {
+        file_path,
+        line,
+        character,
+        use_zero_index = false,
+      } = args as {
         file_path: string;
         line: number;
         character: number;
+        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
-      const locations = await lspClient.findDefinition(absolutePath, { line, character });
+      const adjustedLine = use_zero_index ? line : line - 1;
+      const locations = await lspClient.findDefinition(absolutePath, {
+        line: adjustedLine,
+        character,
+      });
 
       if (locations.length === 0) {
         return {
@@ -173,17 +204,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         line,
         character,
         include_declaration = true,
+        use_zero_index = false,
       } = args as {
         file_path: string;
         line: number;
         character: number;
         include_declaration?: boolean;
+        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
+      const adjustedLine = use_zero_index ? line : line - 1;
       const locations = await lspClient.findReferences(
         absolutePath,
-        { line, character },
+        { line: adjustedLine, character },
         include_declaration
       );
 
@@ -217,17 +251,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'rename_symbol') {
-      const { file_path, line, character, new_name } = args as {
+      const {
+        file_path,
+        line,
+        character,
+        new_name,
+        use_zero_index = false,
+      } = args as {
         file_path: string;
         line: number;
         character: number;
         new_name: string;
+        use_zero_index?: boolean;
       };
       const absolutePath = resolve(file_path);
 
+      const adjustedLine = use_zero_index ? line : line - 1;
       const workspaceEdit = await lspClient.renameSymbol(
         absolutePath,
-        { line, character },
+        { line: adjustedLine, character },
         new_name
       );
 

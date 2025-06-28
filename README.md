@@ -408,8 +408,9 @@ Find the definition of a symbol at a specific position. Returns line/character n
 **Parameters:**
 
 - `file_path`: Absolute path to the file
-- `line`: Line number (0-based)
+- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
 - `character`: Character position (0-based)
+- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
 
 ### `find_references`
 
@@ -418,9 +419,10 @@ Find all references to a symbol at a specific position. Returns line/character n
 **Parameters:**
 
 - `file_path`: Absolute path to the file
-- `line`: Line number (0-based)
+- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
 - `character`: Character position (0-based)
 - `include_declaration`: Whether to include the declaration (optional, default: true)
+- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
 
 ### `rename_symbol`
 
@@ -429,9 +431,10 @@ Rename a symbol at a specific position in a file. Returns the file changes neede
 **Parameters:**
 
 - `file_path`: Absolute path to the file
-- `line`: Line number (0-based)
+- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
 - `character`: Character position (0-based)
 - `new_name`: The new name for the symbol
+- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
 
 ## 💡 Real-world Examples
 

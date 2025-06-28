@@ -22,6 +22,20 @@ bun run build
 bun run start
 # or directly
 node dist/index.js
+
+# Run setup wizard to configure LSP servers
+cclsp setup
+
+# Quality assurance
+bun run lint         # Check code style and issues
+bun run lint:fix     # Auto-fix safe issues
+bun run format       # Format code with Biome
+bun run typecheck    # Run TypeScript type checking
+bun run test         # Run unit tests
+bun run test:manual  # Run manual MCP client test
+
+# Full pre-publish check
+npm run prepublishOnly  # build + test + typecheck
 ```
 
 ## Architecture
@@ -31,8 +45,9 @@ node dist/index.js
 **MCP Server Layer** (`index.ts`)
 
 - Entry point that implements MCP protocol
-- Exposes `find_definition` and `find_references` tools
+- Exposes `find_definition`, `find_references`, and `rename_symbol` tools
 - Handles MCP client requests and delegates to LSP layer
+- Includes subcommand handling for `cclsp setup`
 
 **LSP Client Layer** (`src/lsp-client.ts`)
 
@@ -41,11 +56,12 @@ node dist/index.js
 - Maps file extensions to appropriate language servers
 - Maintains process lifecycle and request/response correlation
 
-**Configuration System** (`cclsp.config.json`)
+**Configuration System** (`cclsp.json` or via `CCLSP_CONFIG_PATH`)
 
 - Defines which LSP servers to use for different file extensions
 - Supports environment-based config via `CCLSP_CONFIG_PATH` env var
-- Falls back to default TypeScript server if no config found
+- Interactive setup wizard via `cclsp setup` command
+- File scanning with gitignore support for project structure detection
 
 ### Data Flow
 
@@ -75,15 +91,39 @@ Supported language servers (configurable):
 
 The server loads configuration in this order:
 
-1. `CCLSP_CONFIG_PATH` environment variable (JSON string)
-2. `cclsp.config.json` file in working directory
-3. Default TypeScript-only configuration
+1. `CCLSP_CONFIG_PATH` environment variable pointing to config file
+2. `cclsp.json` file in working directory
+3. Fails if neither is found (no default fallback)
+
+### Interactive Setup
+
+Use `cclsp setup` to configure LSP servers interactively:
+
+- Scans project for file extensions (respects .gitignore)
+- Presents pre-configured language server options
+- Generates `cclsp.json` configuration file
+- Validates server availability before configuration
 
 Each server config requires:
 
-- `extensions`: File extensions to handle
+- `extensions`: File extensions to handle (array)
 - `command`: Command array to spawn LSP server
 - `rootDir`: Working directory for LSP server (optional)
+
+## Code Quality & Testing
+
+The project uses Biome for linting and formatting:
+
+- **Linting**: Enabled with recommended rules + custom strictness
+- **Formatting**: 2-space indents, single quotes, semicolons always, LF endings
+- **TypeScript**: Strict type checking with `--noEmit`
+- **Testing**: Bun test framework with unit tests in `src/*.test.ts`
+
+Run quality checks before committing:
+
+```bash
+bun run lint:fix && bun run format && bun run typecheck && bun run test
+```
 
 ## LSP Protocol Details
 
@@ -94,4 +134,5 @@ The implementation handles LSP protocol specifics:
 - Request/response correlation via ID tracking
 - Server initialization handshake
 - Proper process cleanup on shutdown
+- Preloading of servers for detected file types
 

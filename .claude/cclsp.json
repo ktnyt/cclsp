@@ -14,6 +14,19 @@
         "--stdio"
       ],
       "rootDir": "."
+    },
+    {
+      "extensions": [
+        "py",
+        "pyi"
+      ],
+      "command": [
+        "uvx",
+        "--from",
+        "python-lsp-server",
+        "pylsp"
+      ],
+      "rootDir": "."
     }
   ]
 }
