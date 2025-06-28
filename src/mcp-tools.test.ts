@@ -40,9 +40,10 @@ async function handleToolCall(name: string, args: ToolArgs, mockLspClient: MockL
     };
 
     const adjustedLine = use_zero_index ? line : line - 1;
+    const adjustedCharacter = use_zero_index ? character : character - 1;
     await mockLspClient.findDefinition('test.ts', {
       line: adjustedLine,
-      character,
+      character: adjustedCharacter,
     });
 
     return {
@@ -71,9 +72,10 @@ async function handleToolCall(name: string, args: ToolArgs, mockLspClient: MockL
     };
 
     const adjustedLine = use_zero_index ? line : line - 1;
+    const adjustedCharacter = use_zero_index ? character : character - 1;
     await mockLspClient.findReferences(
       'test.ts',
-      { line: adjustedLine, character },
+      { line: adjustedLine, character: adjustedCharacter },
       include_declaration
     );
 
@@ -103,7 +105,12 @@ async function handleToolCall(name: string, args: ToolArgs, mockLspClient: MockL
     };
 
     const adjustedLine = use_zero_index ? line : line - 1;
-    await mockLspClient.renameSymbol('test.ts', { line: adjustedLine, character }, new_name || '');
+    const adjustedCharacter = use_zero_index ? character : character - 1;
+    await mockLspClient.renameSymbol(
+      'test.ts',
+      { line: adjustedLine, character: adjustedCharacter },
+      new_name || ''
+    );
 
     return {
       content: [
@@ -133,14 +140,14 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input (gets converted to 9)
         },
         mockLspClient
       );
 
       expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
         line: 4, // 5 - 1 (1-indexed to 0-indexed)
-        character: 10,
+        character: 9, // 10 - 1 (1-indexed to 0-indexed)
       });
 
       expect(response.content[0]).toEqual({
@@ -155,7 +162,7 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input
           use_zero_index: true,
         },
         mockLspClient
@@ -163,7 +170,7 @@ describe('MCP Tools with use_zero_index option', () => {
 
       expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
         line: 5, // Original line number (0-indexed)
-        character: 10,
+        character: 10, // Original character position (0-indexed)
       });
 
       expect(response.content[0]).toEqual({
@@ -178,7 +185,7 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input
           use_zero_index: false,
         },
         mockLspClient
@@ -186,7 +193,7 @@ describe('MCP Tools with use_zero_index option', () => {
 
       expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
         line: 4, // 5 - 1 (1-indexed to 0-indexed)
-        character: 10,
+        character: 9, // 10 - 1 (1-indexed to 0-indexed)
       });
 
       expect(response.content[0]).toEqual({
@@ -203,7 +210,7 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input
         },
         mockLspClient
       );
@@ -212,7 +219,7 @@ describe('MCP Tools with use_zero_index option', () => {
         'test.ts',
         {
           line: 4, // 5 - 1 (1-indexed to 0-indexed)
-          character: 10,
+          character: 9, // 10 - 1 (1-indexed to 0-indexed)
         },
         true
       );
@@ -229,7 +236,7 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input
           use_zero_index: true,
           include_declaration: false,
         },
@@ -240,7 +247,7 @@ describe('MCP Tools with use_zero_index option', () => {
         'test.ts',
         {
           line: 5, // Original line number (0-indexed)
-          character: 10,
+          character: 10, // Original character position (0-indexed)
         },
         false
       );
@@ -259,7 +266,7 @@ describe('MCP Tools with use_zero_index option', () => {
         {
           file_path: 'test.ts',
           line: 5,
-          character: 10,
+          character: 10, // 1-indexed input
           new_name: 'newSymbolName',
         },
         mockLspClient
@@ -269,7 +276,7 @@ describe('MCP Tools with use_zero_index option', () => {
         'test.ts',
         {
           line: 4, // 5 - 1 (1-indexed to 0-indexed)
-          character: 10,
+          character: 9, // 10 - 1 (1-indexed to 0-indexed)
         },
         'newSymbolName'
       );
@@ -297,7 +304,7 @@ describe('MCP Tools with use_zero_index option', () => {
         'test.ts',
         {
           line: 5, // Original line number (0-indexed)
-          character: 10,
+          character: 10, // Original character position (0-indexed)
         },
         'newSymbolName'
       );
@@ -324,7 +331,7 @@ describe('MCP Tools with use_zero_index option', () => {
 
       expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
         line: 0, // Original 0-indexed input
-        character: 0,
+        character: 0, // Original 0-indexed input
       });
 
       expect(response.content[0]).toEqual({
@@ -346,13 +353,92 @@ describe('MCP Tools with use_zero_index option', () => {
 
       expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
         line: 0, // 1 - 1 (1-indexed to 0-indexed)
-        character: 0,
+        character: -1, // 0 - 1 (1-indexed to 0-indexed)
       });
 
       expect(response.content[0]).toEqual({
         type: 'text',
         text: 'find_definition called with line: 0',
       });
+    });
+
+    it('should handle character indexing with default behavior (converts to 0-indexed)', async () => {
+      await handleToolCall(
+        'find_definition',
+        {
+          file_path: 'test.ts',
+          line: 1,
+          character: 5, // 1-indexed input
+        },
+        mockLspClient
+      );
+
+      expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
+        line: 0, // 1 - 1 (1-indexed to 0-indexed)
+        character: 4, // 5 - 1 (1-indexed to 0-indexed)
+      });
+    });
+
+    it('should handle character indexing with use_zero_index=true (no conversion)', async () => {
+      await handleToolCall(
+        'find_definition',
+        {
+          file_path: 'test.ts',
+          line: 1,
+          character: 5, // 0-indexed input
+          use_zero_index: true,
+        },
+        mockLspClient
+      );
+
+      expect(mockLspClient.findDefinition).toHaveBeenCalledWith('test.ts', {
+        line: 1, // Original 0-indexed input
+        character: 5, // Original 0-indexed input
+      });
+    });
+
+    it('should handle character 1 with default behavior (converts to 0)', async () => {
+      await handleToolCall(
+        'find_references',
+        {
+          file_path: 'test.ts',
+          line: 2,
+          character: 1, // 1-indexed input
+        },
+        mockLspClient
+      );
+
+      expect(mockLspClient.findReferences).toHaveBeenCalledWith(
+        'test.ts',
+        {
+          line: 1, // 2 - 1 (1-indexed to 0-indexed)
+          character: 0, // 1 - 1 (1-indexed to 0-indexed)
+        },
+        true
+      );
+    });
+
+    it('should handle character 0 with use_zero_index=true', async () => {
+      await handleToolCall(
+        'rename_symbol',
+        {
+          file_path: 'test.ts',
+          line: 0,
+          character: 0, // 0-indexed input
+          new_name: 'test',
+          use_zero_index: true,
+        },
+        mockLspClient
+      );
+
+      expect(mockLspClient.renameSymbol).toHaveBeenCalledWith(
+        'test.ts',
+        {
+          line: 0, // Original 0-indexed input
+          character: 0, // Original 0-indexed input
+        },
+        'test'
+      );
     });
   });
 });

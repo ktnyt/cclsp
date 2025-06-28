@@ -103,10 +103,10 @@ Run the interactive setup wizard:
 
 ```bash
 # One-time setup (no installation required)
-npx cclsp setup
+npx cclsp@latest setup
 
 # For user-wide configuration
-npx cclsp setup --user
+npx cclsp@latest setup --user
 ```
 
 The setup wizard will:
@@ -129,10 +129,10 @@ For Claude Code users, the simplest approach:
 
 ```bash
 # Run setup and follow the prompts
-npx cclsp setup
+npx cclsp@latest setup
 
 # The wizard will ask if you want to run this automatically:
-# claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/config
+# claude mcp add cclsp npx cclsp@latest --env CCLSP_CONFIG_PATH=/path/to/config
 ```
 
 ### Manual Setup
@@ -158,7 +158,7 @@ If you prefer manual configuration:
 
 4. **Add to Claude MCP**:
    ```bash
-   claude mcp add cclsp npx cclsp --env CCLSP_CONFIG_PATH=/path/to/cclsp.json
+   claude mcp add cclsp npx cclsp@latest --env CCLSP_CONFIG_PATH=/path/to/cclsp.json
    ```
 
 ### Language Server Installation
@@ -218,7 +218,7 @@ gem install solargraph
 npm install -g intelephense
 ```
 
-For more languages and detailed instructions, run `npx cclsp setup` and select "Show detailed installation guides".
+For more languages and detailed instructions, run `npx cclsp@latest setup` and select "Show detailed installation guides".
 
 </details>
 
@@ -229,7 +229,7 @@ After setup, verify cclsp is working:
 1. **Check configuration**:
 
    ```bash
-   npx cclsp --help
+   npx cclsp@latest --help
    ```
 
 2. **Test in Claude Code**:
@@ -282,7 +282,7 @@ For easy setup, use the interactive configuration generator:
 
 ```bash
 # Using npx (recommended for one-time setup)
-npx cclsp setup
+npx cclsp@latest setup
 
 # If installed globally
 cclsp setup
