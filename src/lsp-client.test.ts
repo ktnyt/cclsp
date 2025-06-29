@@ -435,4 +435,94 @@ describe('LSPClient', () => {
       getDocumentSymbolsSpy.mockRestore();
     });
   });
+
+  describe('Server restart functionality', () => {
+    it('should setup restart timer when restartInterval is configured', () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock setTimeout to verify timer is set
+      const setTimeoutSpy = spyOn(global, 'setTimeout').mockImplementation((() => 123) as any);
+
+      const mockServerState = {
+        process: { kill: jest.fn() },
+        initialized: true,
+        initializationPromise: Promise.resolve(),
+        openFiles: new Set(),
+        startTime: Date.now(),
+        config: {
+          extensions: ['ts'],
+          command: ['echo', 'mock'],
+          restartInterval: 0.1, // 0.1 minutes
+        },
+        restartTimer: undefined,
+      };
+
+      try {
+        // Call setupRestartTimer directly
+        (client as any).setupRestartTimer(mockServerState);
+
+        // Verify setTimeout was called with correct interval (0.1 minutes = 6000ms)
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 6000);
+      } finally {
+        setTimeoutSpy.mockRestore();
+        client.dispose();
+      }
+    });
+
+    it('should not setup restart timer when restartInterval is not configured', () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock setTimeout to verify timer is NOT set
+      const setTimeoutSpy = spyOn(global, 'setTimeout').mockImplementation((() => 123) as any);
+
+      const mockServerState = {
+        process: { kill: jest.fn() },
+        initialized: true,
+        initializationPromise: Promise.resolve(),
+        openFiles: new Set(),
+        startTime: Date.now(),
+        config: {
+          extensions: ['ts'],
+          command: ['echo', 'mock'],
+          // No restartInterval
+        },
+        restartTimer: undefined,
+      };
+
+      try {
+        // Call setupRestartTimer directly
+        (client as any).setupRestartTimer(mockServerState);
+
+        // Verify setTimeout was NOT called
+        expect(setTimeoutSpy).not.toHaveBeenCalled();
+      } finally {
+        setTimeoutSpy.mockRestore();
+        client.dispose();
+      }
+    });
+
+    it('should clear restart timer when disposing client', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockTimer = setTimeout(() => {}, 1000);
+      const mockServerState = {
+        process: { kill: jest.fn() },
+        restartTimer: mockTimer,
+      };
+
+      // Mock servers map to include our test server state
+      const serversMap = new Map();
+      serversMap.set('test-key', mockServerState);
+      (client as any).servers = serversMap;
+
+      const clearTimeoutSpy = spyOn(global, 'clearTimeout');
+
+      client.dispose();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(mockTimer);
+      expect(mockServerState.process.kill).toHaveBeenCalled();
+
+      clearTimeoutSpy.mockRestore();
+    });
+  });
 });

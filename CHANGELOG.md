@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2025-06-29
+
+### Added
+
+- **LSP Server Auto-Restart**: Added `restartInterval` option to server configuration for automatic LSP server restarts to prevent long-running server degradation
+- Configurable restart intervals in minutes with minimum 0.1 minute (6 seconds) for testing
+- Comprehensive test coverage for restart functionality including timer setup, configuration validation, and cleanup
+
+### Enhanced
+
+- Improved LSP server stability for long-running sessions, particularly beneficial for Python Language Server (pylsp)
+- Updated documentation with configuration examples and restart interval guidelines
+- **Setup Wizard Improvements**: Enhanced file extension detection with comprehensive .gitignore support
+- Improved project structure scanning to exclude common build artifacts, dependencies, and temporary files
+- Better accuracy in detecting project's primary programming languages for LSP server configuration
+
 ## [0.4.1] - 2025-06-28
 
 ### Added

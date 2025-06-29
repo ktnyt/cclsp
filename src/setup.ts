@@ -152,6 +152,61 @@ async function runCommand(command: string[], name: string): Promise<boolean> {
   });
 }
 
+async function runCommandSilent(
+  command: string[]
+): Promise<{ success: boolean; output: string; error: string }> {
+  return new Promise((resolve) => {
+    const [cmd, ...args] = command;
+    if (!cmd) {
+      resolve({ success: false, output: '', error: 'No command specified' });
+      return;
+    }
+
+    const process: ChildProcess = spawn(cmd, args, {
+      stdio: ['inherit', 'pipe', 'pipe'] as const,
+    });
+
+    let output = '';
+    let error = '';
+
+    process.stdout?.on('data', (data: Buffer) => {
+      output += data.toString();
+    });
+
+    process.stderr?.on('data', (data: Buffer) => {
+      error += data.toString();
+    });
+
+    process.on('close', (code: number | null) => {
+      resolve({
+        success: code === 0,
+        output: output.trim(),
+        error: error.trim(),
+      });
+    });
+  });
+}
+
+async function checkExistingCclspMCP(isUser: boolean): Promise<boolean> {
+  try {
+    const scopeFlag = isUser ? '--scope user' : '';
+    const listCommand = ['claude', 'mcp', 'list'];
+    if (scopeFlag) {
+      listCommand.push(scopeFlag);
+    }
+
+    const result = await runCommandSilent(listCommand);
+    if (!result.success) {
+      return false;
+    }
+
+    // Check if cclsp is in the output
+    return result.output.toLowerCase().includes('cclsp');
+  } catch (error) {
+    return false;
+  }
+}
+
 async function installLSPServers(servers: (typeof LANGUAGE_SERVERS)[0][]): Promise<void> {
   console.log('\n🚀 Starting LSP server installation...\n');
 
@@ -450,10 +505,31 @@ async function main() {
     ]);
 
     if (shouldAddToMCP) {
-      console.log('\n🔄 Adding cclsp to Claude MCP configuration...');
-      console.log(`   Running: ${mcpCommand}`);
+      console.log('\n🔄 Configuring cclsp in Claude MCP...');
 
       try {
+        // Check if cclsp already exists
+        const cclspExists = await checkExistingCclspMCP(isUser);
+
+        if (cclspExists) {
+          console.log('🔍 Found existing cclsp MCP configuration');
+          console.log('🗑️ Removing existing cclsp configuration...');
+
+          const scopeFlag = isUser ? '--scope user' : '';
+          const removeCommand = ['claude', 'mcp', 'remove', 'cclsp'];
+          if (scopeFlag) {
+            removeCommand.push(scopeFlag);
+          }
+
+          const removeSuccess = await runCommand(removeCommand, 'remove existing cclsp MCP');
+          if (!removeSuccess) {
+            console.log('⚠️ Failed to remove existing cclsp configuration, continuing with add...');
+          }
+        }
+
+        console.log('➕ Adding cclsp to Claude MCP configuration...');
+        console.log(`   Running: ${mcpCommand}`);
+
         const mcpArgs = mcpCommand.split(' ').slice(1); // Remove 'claude' from the command
         const success = await runCommand(['claude', ...mcpArgs], 'cclsp MCP configuration');
 
@@ -468,7 +544,7 @@ async function main() {
           console.log(`   ${mcpCommand}`);
         }
       } catch (error) {
-        console.log(`\n❌ Failed to add cclsp to MCP configuration: ${error}`);
+        console.log(`\n❌ Failed to configure cclsp in MCP: ${error}`);
         console.log('\n💡 You can manually add cclsp to your MCP configuration using:');
         console.log(`   ${mcpCommand}`);
       }

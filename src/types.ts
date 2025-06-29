@@ -2,6 +2,7 @@ export interface LSPServerConfig {
   extensions: string[];
   command: string[];
   rootDir?: string;
+  restartInterval?: number; // in minutes, optional auto-restart interval
 }
 
 export interface Config {

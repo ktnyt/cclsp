@@ -8,6 +8,7 @@ interface GeneratedConfig {
     extensions: string[];
     command: string[];
     rootDir: string;
+    restartInterval?: number;
   }>;
 }
 
@@ -118,6 +119,28 @@ describe('generateConfig', () => {
     expect(serverNames).toContain('typescript');
     expect(serverNames).toContain('python');
     expect(serverNames).toContain('go');
+  });
+
+  test('should include restartInterval for Python server', () => {
+    const config = generateConfig(['python']);
+    expect(config).toHaveProperty('servers');
+    expect(Array.isArray((config as GeneratedConfig).servers)).toBe(true);
+    expect((config as GeneratedConfig).servers).toHaveLength(1);
+
+    const pythonServer = (config as GeneratedConfig).servers[0];
+    expect(pythonServer?.extensions).toContain('py');
+    expect(pythonServer?.restartInterval).toBe(5);
+  });
+
+  test('should not include restartInterval for servers without it configured', () => {
+    const config = generateConfig(['typescript']);
+    expect(config).toHaveProperty('servers');
+    expect(Array.isArray((config as GeneratedConfig).servers)).toBe(true);
+    expect((config as GeneratedConfig).servers).toHaveLength(1);
+
+    const typescriptServer = (config as GeneratedConfig).servers[0];
+    expect(typescriptServer?.extensions).toContain('ts');
+    expect(typescriptServer?.restartInterval).toBeUndefined();
   });
 
   test('should handle invalid language names gracefully', () => {

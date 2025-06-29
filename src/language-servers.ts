@@ -7,6 +7,7 @@ export interface LanguageServerConfig {
   rootDir?: string;
   description?: string;
   installRequired?: boolean;
+  restartInterval?: number; // Default restart interval in minutes
 }
 
 export const LANGUAGE_SERVERS: LanguageServerConfig[] = [
@@ -27,6 +28,7 @@ export const LANGUAGE_SERVERS: LanguageServerConfig[] = [
     installInstructions: 'pip install python-lsp-server',
     description: 'Python Language Server Protocol implementation',
     installRequired: false,
+    restartInterval: 5, // Auto-restart every 5 minutes to prevent performance degradation
   },
   {
     name: 'go',
@@ -153,10 +155,24 @@ export function generateConfig(selectedLanguages: string[]): object {
   );
 
   return {
-    servers: selectedServers.map((server) => ({
-      extensions: server.extensions,
-      command: server.command,
-      rootDir: server.rootDir || '.',
-    })),
+    servers: selectedServers.map((server) => {
+      const config: {
+        extensions: string[];
+        command: string[];
+        rootDir: string;
+        restartInterval?: number;
+      } = {
+        extensions: server.extensions,
+        command: server.command,
+        rootDir: server.rootDir || '.',
+      };
+
+      // Add restartInterval if specified for the server
+      if (server.restartInterval) {
+        config.restartInterval = server.restartInterval;
+      }
+
+      return config;
+    }),
   };
 }

@@ -109,6 +109,26 @@ Each server config requires:
 - `extensions`: File extensions to handle (array)
 - `command`: Command array to spawn LSP server
 - `rootDir`: Working directory for LSP server (optional)
+- `restartInterval`: Auto-restart interval in minutes (optional, helps with long-running server stability, minimum 1 minute)
+
+### Example Configuration
+
+```json
+{
+  "servers": [
+    {
+      "extensions": ["py"],
+      "command": ["pylsp"],
+      "restartInterval": 5
+    },
+    {
+      "extensions": ["ts", "tsx", "js", "jsx"],
+      "command": ["typescript-language-server", "--stdio"],
+      "restartInterval": 10
+    }
+  ]
+}
+```
 
 ## Code Quality & Testing
 

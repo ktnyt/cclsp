@@ -478,6 +478,40 @@ Result: 12 files will be updated with the new name
 
 ## 🔍 Troubleshooting
 
+### Known Issues
+
+<details>
+<summary>🐍 Python LSP Server (pylsp) Performance Degradation</summary>
+
+**Problem**: The Python Language Server (pylsp) may become slow or unresponsive after extended use (several hours), affecting symbol resolution and code navigation.
+
+**Symptoms**:
+- Slow or missing "go to definition" results for Python files
+- Delayed or incomplete symbol references
+- General responsiveness issues with Python code analysis
+
+**Solution**: Use the auto-restart feature to periodically restart the pylsp server:
+
+Add `restartInterval` to your Python server configuration:
+
+```json
+{
+  "servers": [
+    {
+      "extensions": ["py", "pyi"],
+      "command": ["pylsp"],
+      "restartInterval": 5
+    }
+  ]
+}
+```
+
+This will automatically restart the Python LSP server every 5 minutes, maintaining optimal performance for long coding sessions.
+
+**Note**: The setup wizard automatically configures this for Python servers when detected.
+
+</details>
+
 ### Common Issues
 
 <details>

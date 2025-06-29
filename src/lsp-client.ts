@@ -30,6 +30,9 @@ interface ServerState {
   initialized: boolean;
   initializationPromise: Promise<void>;
   openFiles: Set<string>;
+  startTime: number;
+  config: LSPServerConfig;
+  restartTimer?: NodeJS.Timeout;
 }
 
 export class LSPClient {
@@ -128,6 +131,9 @@ export class LSPClient {
       initialized: false,
       initializationPromise,
       openFiles: new Set(),
+      startTime: Date.now(),
+      config: serverConfig,
+      restartTimer: undefined,
     };
 
     let buffer = '';
@@ -237,6 +243,10 @@ export class LSPClient {
 
     serverState.initialized = true;
     initializationResolve?.();
+
+    // Set up auto-restart timer if configured
+    this.setupRestartTimer(serverState);
+
     return serverState;
   }
 
@@ -288,6 +298,54 @@ export class LSPClient {
       params,
     };
     this.sendMessage(process, message);
+  }
+
+  private setupRestartTimer(serverState: ServerState): void {
+    if (serverState.config.restartInterval && serverState.config.restartInterval > 0) {
+      // Minimum interval is 0.1 minutes (6 seconds) for testing, practical minimum is 1 minute
+      const minInterval = 0.1;
+      const actualInterval = Math.max(serverState.config.restartInterval, minInterval);
+      const intervalMs = actualInterval * 60 * 1000; // Convert minutes to milliseconds
+
+      process.stderr.write(
+        `[DEBUG setupRestartTimer] Setting up restart timer for ${actualInterval} minutes\n`
+      );
+
+      serverState.restartTimer = setTimeout(() => {
+        this.restartServer(serverState);
+      }, intervalMs);
+    }
+  }
+
+  private async restartServer(serverState: ServerState): Promise<void> {
+    const key = JSON.stringify(serverState.config);
+    process.stderr.write(
+      `[DEBUG restartServer] Restarting LSP server for ${serverState.config.command.join(' ')}\n`
+    );
+
+    // Clear existing timer
+    if (serverState.restartTimer) {
+      clearTimeout(serverState.restartTimer);
+      serverState.restartTimer = undefined;
+    }
+
+    // Terminate old server
+    serverState.process.kill();
+
+    // Remove from servers map
+    this.servers.delete(key);
+
+    try {
+      // Start new server
+      const newServerState = await this.startServer(serverState.config);
+      this.servers.set(key, newServerState);
+
+      process.stderr.write(
+        `[DEBUG restartServer] Successfully restarted LSP server for ${serverState.config.command.join(' ')}\n`
+      );
+    } catch (error) {
+      process.stderr.write(`[DEBUG restartServer] Failed to restart LSP server: ${error}\n`);
+    }
   }
 
   private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<void> {
@@ -983,6 +1041,10 @@ export class LSPClient {
 
   dispose(): void {
     for (const serverState of this.servers.values()) {
+      // Clear restart timer if exists
+      if (serverState.restartTimer) {
+        clearTimeout(serverState.restartTimer);
+      }
       serverState.process.kill();
     }
     this.servers.clear();
