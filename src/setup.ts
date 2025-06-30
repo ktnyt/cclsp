@@ -95,6 +95,26 @@ const DETAILED_INSTALL_GUIDES = {
       'Verify installation with: intelephense --version',
     ],
   },
+  vue: {
+    title: 'Vue.js Language Server (Volar)',
+    commands: ['npm install -g @vue/language-server'],
+    notes: [
+      'Requires Node.js to be installed',
+      'Official Vue.js language server with full Vue 3 support',
+      'Works with TypeScript and JavaScript',
+      'Verify installation with: vue-language-server --version',
+    ],
+  },
+  svelte: {
+    title: 'Svelte Language Server',
+    commands: ['npm install -g svelte-language-server'],
+    notes: [
+      'Requires Node.js to be installed',
+      'Provides IntelliSense for Svelte components',
+      'Works with TypeScript and JavaScript',
+      'Verify installation with: svelteserver --help',
+    ],
+  },
 };
 
 // Installation commands for automatic installation
@@ -108,6 +128,8 @@ const AUTO_INSTALL_COMMANDS = {
   ],
   ruby: ['gem', 'install', 'solargraph'],
   php: ['npm', 'install', '-g', 'intelephense'],
+  vue: ['npm', 'install', '-g', '@vue/language-server'],
+  svelte: ['npm', 'install', '-g', 'svelte-language-server'],
 };
 
 async function runCommand(command: string[], name: string): Promise<boolean> {

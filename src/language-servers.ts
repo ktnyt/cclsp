@@ -147,6 +147,24 @@ export const LANGUAGE_SERVERS: LanguageServerConfig[] = [
     description: 'Language server for Lua programming language',
     installRequired: true,
   },
+  {
+    name: 'vue',
+    displayName: 'Vue.js',
+    extensions: ['vue'],
+    command: ['npx', '--', 'vue-language-server', '--stdio'],
+    installInstructions: 'npm install -g @vue/language-server',
+    description: 'Official Vue.js language server (Volar)',
+    installRequired: false,
+  },
+  {
+    name: 'svelte',
+    displayName: 'Svelte',
+    extensions: ['svelte'],
+    command: ['npx', '--', 'svelteserver', '--stdio'],
+    installInstructions: 'npm install -g svelte-language-server',
+    description: 'Language server for Svelte framework',
+    installRequired: false,
+  },
 ];
 
 export function generateConfig(selectedLanguages: string[]): object {

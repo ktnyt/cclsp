@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2025-06-30
+
+### Added
+
+- **Vue.js Language Server Support**: Added official Vue.js language server (Volar) configuration
+- **Svelte Language Server Support**: Added Svelte language server configuration 
+- Support for `.vue` and `.svelte` file extensions in setup wizard
+- Installation guides and auto-install commands for Vue.js and Svelte language servers
+
+### Maintenance
+
+- Cleaned up temporary test files (`test-example.ts`, `test-mcp.mjs`, `test-rename.ts`)
+
 ## [0.4.2] - 2025-06-29
 
 ### Added
