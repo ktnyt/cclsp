@@ -18,9 +18,6 @@ https://github.com/user-attachments/assets/52980f32-64d6-4b78-9cbf-18d6ae120cdd
 - [Why cclsp?](#why-cclsp)
 - [Features](#features)
 - [📋 Prerequisites](#-prerequisites)
-- [📦 Installation](#-installation)
-  - [From npm (Recommended)](#from-npm-recommended)
-  - [From Source](#from-source)
 - [⚡ Setup](#-setup)
   - [Automated Setup (Recommended)](#automated-setup-recommended)
   - [Claude Code Quick Setup](#claude-code-quick-setup)
@@ -68,31 +65,6 @@ When using AI-powered coding assistants like Claude, you often need to navigate 
 - Node.js 18+ or Bun runtime
 - Language servers for your target languages (installed separately)
 
-## 📦 Installation
-
-### From npm (Recommended)
-
-```bash
-npm install -g cclsp
-```
-
-### From Source
-
-```bash
-# Clone the repository
-git clone https://github.com/ktnyt/cclsp.git
-cd cclsp
-
-# Install dependencies
-bun install
-
-# Build the project
-bun run build
-
-# Run the server
-bun run start
-```
-
 ## ⚡ Setup
 
 cclsp provides an interactive setup wizard that automates the entire configuration process. Choose your preferred method:
@@ -122,18 +94,6 @@ The setup wizard will:
 
 - **Project Configuration** (default): Creates `.claude/cclsp.json` in current directory
 - **User Configuration** (`--user`): Creates global config in `~/.config/claude/cclsp.json`
-
-### Claude Code Quick Setup
-
-For Claude Code users, the simplest approach:
-
-```bash
-# Run setup and follow the prompts
-npx cclsp@latest setup
-
-# The wizard will ask if you want to run this automatically:
-# claude mcp add cclsp npx cclsp@latest --env CCLSP_CONFIG_PATH=/path/to/config
-```
 
 ### Manual Setup
 
@@ -221,21 +181,6 @@ npm install -g intelephense
 For more languages and detailed instructions, run `npx cclsp@latest setup` and select "Show detailed installation guides".
 
 </details>
-
-### Verification
-
-After setup, verify cclsp is working:
-
-1. **Check configuration**:
-
-   ```bash
-   npx cclsp@latest --help
-   ```
-
-2. **Test in Claude Code**:
-   - Open a code file
-   - Ask Claude to find a function definition
-   - Verify the `find_definition` tool appears
 
 ## 🚀 Usage
 
