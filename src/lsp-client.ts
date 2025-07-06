@@ -33,6 +33,7 @@ interface ServerState {
   startTime: number;
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
+  initializationResolve?: () => void;
 }
 
 export class LSPClient {
@@ -135,6 +136,9 @@ export class LSPClient {
       config: serverConfig,
       restartTimer: undefined,
     };
+
+    // Store the resolve function to call when initialized notification is received
+    serverState.initializationResolve = initializationResolve;
 
     let buffer = '';
     childProcess.stdout?.on('data', (data: Buffer) => {
@@ -239,10 +243,11 @@ export class LSPClient {
       },
     });
 
+    // Send the initialized notification after receiving the initialize response
     await this.sendNotification(childProcess, 'initialized', {});
 
-    serverState.initialized = true;
-    initializationResolve?.();
+    // Wait for the server to send the initialized notification back
+    await initializationPromise;
 
     // Set up auto-restart timer if configured
     this.setupRestartTimer(serverState);
@@ -266,7 +271,18 @@ export class LSPClient {
 
     // Handle notifications from server
     if (message.method && serverState) {
-      // Could handle server notifications here if needed
+      if (message.method === 'initialized') {
+        process.stderr.write(
+          '[DEBUG handleMessage] Received initialized notification from server\n'
+        );
+        serverState.initialized = true;
+        // Resolve the initialization promise
+        const resolve = serverState.initializationResolve;
+        if (resolve) {
+          resolve();
+          serverState.initializationResolve = undefined;
+        }
+      }
     }
   }
 
