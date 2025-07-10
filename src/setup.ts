@@ -132,9 +132,15 @@ const AUTO_INSTALL_COMMANDS = {
   svelte: ['npm', 'install', '-g', 'svelte-language-server'],
 };
 
-async function runCommand(command: string[], name: string): Promise<boolean> {
+async function runCommand(
+  command: string[],
+  name: string,
+  showInstallingMessage = true
+): Promise<boolean> {
   return new Promise((resolve) => {
-    console.log(`🔄 Installing ${name}...`);
+    if (showInstallingMessage) {
+      console.log(`🔄 Installing ${name}...`);
+    }
     console.log(`   Running: ${command.join(' ')}`);
 
     const [cmd, ...args] = command;
@@ -144,12 +150,14 @@ async function runCommand(command: string[], name: string): Promise<boolean> {
       return;
     }
 
-    const process: ChildProcess = spawn(cmd, args, {
-      stdio: ['inherit', 'pipe', 'pipe'] as const,
+    const process = spawn(cmd, args, {
+      stdio: ['pipe', 'pipe', 'pipe'] as const,
+      shell: false,
     });
 
     let output = '';
     let error = '';
+    let hasErrored = false;
 
     process.stdout?.on('data', (data: Buffer) => {
       output += data.toString();
@@ -159,16 +167,30 @@ async function runCommand(command: string[], name: string): Promise<boolean> {
       error += data.toString();
     });
 
+    process.on('error', (err: NodeJS.ErrnoException) => {
+      hasErrored = true;
+      console.log(`❌ Failed to install ${name}`);
+      console.log(`   Error: ${err.message}`);
+      resolve(false);
+    });
+
     process.on('close', (code: number | null) => {
-      if (code === 0) {
-        console.log(`✅ ${name} installed successfully`);
-        resolve(true);
-      } else {
-        console.log(`❌ Failed to install ${name}`);
-        if (error) {
-          console.log(`   Error: ${error.trim()}`);
+      // Only handle close if we haven't already handled an error
+      if (!hasErrored) {
+        if (code === 0) {
+          console.log(`✅ ${name} installed successfully`);
+          resolve(true);
+        } else {
+          console.log(`❌ Failed to install ${name}`);
+          if (error) {
+            console.log(`   Error output: ${error.trim()}`);
+          }
+          if (output) {
+            console.log(`   Output: ${output.trim()}`);
+          }
+          console.log(`   Exit code: ${code}`);
+          resolve(false);
         }
-        resolve(false);
       }
     });
   });
@@ -184,12 +206,14 @@ async function runCommandSilent(
       return;
     }
 
-    const process: ChildProcess = spawn(cmd, args, {
-      stdio: ['inherit', 'pipe', 'pipe'] as const,
+    const process = spawn(cmd, args, {
+      stdio: ['pipe', 'pipe', 'pipe'] as const,
+      shell: false,
     });
 
     let output = '';
     let error = '';
+    let hasErrored = false;
 
     process.stdout?.on('data', (data: Buffer) => {
       output += data.toString();
@@ -199,20 +223,36 @@ async function runCommandSilent(
       error += data.toString();
     });
 
-    process.on('close', (code: number | null) => {
+    process.on('error', (err: NodeJS.ErrnoException) => {
+      hasErrored = true;
       resolve({
-        success: code === 0,
+        success: false,
         output: output.trim(),
-        error: error.trim(),
+        error: err.message,
       });
+    });
+
+    process.on('close', (code: number | null) => {
+      // Only handle close if we haven't already handled an error
+      if (!hasErrored) {
+        resolve({
+          success: code === 0,
+          output: output.trim(),
+          error: error.trim(),
+        });
+      }
     });
   });
 }
 
 async function checkExistingCclspMCP(isUser: boolean): Promise<boolean> {
   try {
+    // Check if claude command exists, otherwise use local installation
+    const { success: claudeExists } = await runCommandSilent(['which', 'claude']);
+    const claudeCmd = claudeExists ? 'claude' : join(homedir(), '.claude', 'local', 'claude');
+
     const scopeFlag = isUser ? '--scope user' : '';
-    const listCommand = ['claude', 'mcp', 'list'];
+    const listCommand = [claudeCmd, 'mcp', 'list'];
     if (scopeFlag) {
       listCommand.push(scopeFlag);
     }
@@ -530,6 +570,14 @@ async function main() {
       console.log('\n🔄 Configuring cclsp in Claude MCP...');
 
       try {
+        // Check if claude command exists, otherwise use local installation
+        const { success: claudeExists } = await runCommandSilent(['which', 'claude']);
+        const claudeCmd = claudeExists ? 'claude' : join(homedir(), '.claude', 'local', 'claude');
+
+        if (!claudeExists) {
+          console.log(`   Using local Claude installation at ${claudeCmd}`);
+        }
+
         // Check if cclsp already exists
         const cclspExists = await checkExistingCclspMCP(isUser);
 
@@ -538,22 +586,20 @@ async function main() {
           console.log('🗑️ Removing existing cclsp configuration...');
 
           const scopeFlag = isUser ? '--scope user' : '';
-          const removeCommand = ['claude', 'mcp', 'remove', 'cclsp'];
-          if (scopeFlag) {
-            removeCommand.push(scopeFlag);
-          }
-
-          const removeSuccess = await runCommand(removeCommand, 'remove existing cclsp MCP');
+          const removeSuccess = await runCommand(
+            [claudeCmd, 'mcp', 'remove', 'cclsp', scopeFlag].filter(Boolean),
+            'remove existing cclsp MCP',
+            false
+          );
           if (!removeSuccess) {
             console.log('⚠️ Failed to remove existing cclsp configuration, continuing with add...');
           }
         }
 
         console.log('➕ Adding cclsp to Claude MCP configuration...');
-        console.log(`   Running: ${mcpCommand}`);
 
         const mcpArgs = mcpCommand.split(' ').slice(1); // Remove 'claude' from the command
-        const success = await runCommand(['claude', ...mcpArgs], 'cclsp MCP configuration');
+        const success = await runCommand([claudeCmd, ...mcpArgs], 'cclsp MCP configuration', false);
 
         if (success) {
           console.log('🎉 cclsp has been successfully added to your Claude MCP configuration!');
