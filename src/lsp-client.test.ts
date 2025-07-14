@@ -556,6 +556,7 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         openFiles: new Set(),
+        diagnostics: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -600,6 +601,7 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         openFiles: new Set(),
+        diagnostics: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -629,6 +631,50 @@ describe('LSPClient', () => {
       sendRequestSpy.mockRestore();
     });
 
+    it('should return cached diagnostics from publishDiagnostics', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockDiagnostics = [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 10 },
+          },
+          severity: 1,
+          message: 'Cached error',
+        },
+      ];
+
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        process: { stdin: { write: jest.fn() } },
+        initialized: true,
+        openFiles: new Set(),
+        diagnostics: new Map([['file://test.ts', mockDiagnostics]]),
+      };
+
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+      const ensureFileOpenSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'ensureFileOpen'
+      ).mockResolvedValue(undefined);
+      const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+      const result = await client.getDiagnostics('test.ts');
+
+      expect(result).toEqual(mockDiagnostics);
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Returning 1 cached diagnostics from publishDiagnostics')
+      );
+
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
+      stderrSpy.mockRestore();
+    });
+
     it('should handle server not supporting textDocument/diagnostic', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
@@ -637,6 +683,7 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         openFiles: new Set(),
+        diagnostics: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -677,6 +724,7 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         openFiles: new Set(),
+        diagnostics: new Map(),
       };
 
       const getServerSpy = spyOn(

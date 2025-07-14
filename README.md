@@ -384,7 +384,7 @@ Rename a symbol at a specific position in a file. Returns the file changes neede
 
 ### `get_diagnostics`
 
-Get language diagnostics (errors, warnings, hints) for a file. Uses LSP textDocument/diagnostic to pull current diagnostics.
+Get language diagnostics (errors, warnings, hints) for a file. Supports both pull-based (textDocument/diagnostic) and push-based (textDocument/publishDiagnostics) diagnostic reporting for maximum compatibility with different LSP servers.
 
 **Parameters:**
 - `file_path`: The path to the file

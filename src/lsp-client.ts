@@ -36,6 +36,7 @@ interface ServerState {
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
   initializationResolve?: () => void;
+  diagnostics: Map<string, Diagnostic[]>; // Store diagnostics by file URI
 }
 
 export class LSPClient {
@@ -137,6 +138,7 @@ export class LSPClient {
       startTime: Date.now(),
       config: serverConfig,
       restartTimer: undefined,
+      diagnostics: new Map(),
     };
 
     // Store the resolve function to call when initialized notification is received
@@ -305,6 +307,15 @@ export class LSPClient {
         if (resolve) {
           resolve();
           serverState.initializationResolve = undefined;
+        }
+      } else if (message.method === 'textDocument/publishDiagnostics') {
+        // Handle diagnostic notifications from the server
+        const params = message.params as { uri: string; diagnostics: Diagnostic[] };
+        if (params?.uri) {
+          process.stderr.write(
+            `[DEBUG handleMessage] Received publishDiagnostics for ${params.uri} with ${params.diagnostics?.length || 0} diagnostics\n`
+          );
+          serverState.diagnostics.set(params.uri, params.diagnostics || []);
         }
       }
     }
@@ -1056,11 +1067,25 @@ export class LSPClient {
     // Ensure the file is opened and synced with the LSP server
     await this.ensureFileOpen(serverState, filePath);
 
-    process.stderr.write('[DEBUG getDiagnostics] Sending textDocument/diagnostic request\n');
+    // First, check if we have cached diagnostics from publishDiagnostics
+    const fileUri = `file://${filePath}`;
+    const cachedDiagnostics = serverState.diagnostics.get(fileUri);
+
+    if (cachedDiagnostics !== undefined) {
+      process.stderr.write(
+        `[DEBUG getDiagnostics] Returning ${cachedDiagnostics.length} cached diagnostics from publishDiagnostics\n`
+      );
+      return cachedDiagnostics;
+    }
+
+    // If no cached diagnostics, try the pull-based textDocument/diagnostic
+    process.stderr.write(
+      '[DEBUG getDiagnostics] No cached diagnostics, trying textDocument/diagnostic request\n'
+    );
 
     try {
       const result = await this.sendRequest(serverState.process, 'textDocument/diagnostic', {
-        textDocument: { uri: `file://${filePath}` },
+        textDocument: { uri: fileUri },
       });
 
       process.stderr.write(
@@ -1090,8 +1115,73 @@ export class LSPClient {
       // Some LSP servers may not support textDocument/diagnostic
       // Try falling back to waiting for publishDiagnostics notifications
       process.stderr.write(
-        `[DEBUG getDiagnostics] textDocument/diagnostic not supported or failed: ${error}. This is expected for some LSP servers.\n`
+        `[DEBUG getDiagnostics] textDocument/diagnostic not supported or failed: ${error}. Waiting for publishDiagnostics...\n`
       );
+
+      // Give the server a moment to send publishDiagnostics after file open
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Check again for cached diagnostics
+      const diagnosticsAfterWait = serverState.diagnostics.get(fileUri);
+      if (diagnosticsAfterWait !== undefined) {
+        process.stderr.write(
+          `[DEBUG getDiagnostics] Returning ${diagnosticsAfterWait.length} diagnostics after waiting for publishDiagnostics\n`
+        );
+        return diagnosticsAfterWait;
+      }
+
+      // If still no diagnostics, try triggering publishDiagnostics by making a no-op change
+      process.stderr.write(
+        '[DEBUG getDiagnostics] No diagnostics yet, triggering publishDiagnostics with no-op change\n'
+      );
+
+      try {
+        // Get current file content
+        const fileContent = readFileSync(filePath, 'utf-8');
+
+        // Send a no-op change notification (add and remove a space at the end)
+        await this.sendNotification(serverState.process, 'textDocument/didChange', {
+          textDocument: {
+            uri: fileUri,
+            version: Date.now(), // Use timestamp as version
+          },
+          contentChanges: [
+            {
+              text: `${fileContent} `,
+            },
+          ],
+        });
+
+        // Immediately revert the change
+        await this.sendNotification(serverState.process, 'textDocument/didChange', {
+          textDocument: {
+            uri: fileUri,
+            version: Date.now() + 1,
+          },
+          contentChanges: [
+            {
+              text: fileContent,
+            },
+          ],
+        });
+
+        // Wait for publishDiagnostics to be triggered
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Check one more time
+        const diagnosticsAfterTrigger = serverState.diagnostics.get(fileUri);
+        if (diagnosticsAfterTrigger !== undefined) {
+          process.stderr.write(
+            `[DEBUG getDiagnostics] Returning ${diagnosticsAfterTrigger.length} diagnostics after triggering publishDiagnostics\n`
+          );
+          return diagnosticsAfterTrigger;
+        }
+      } catch (triggerError) {
+        process.stderr.write(
+          `[DEBUG getDiagnostics] Failed to trigger publishDiagnostics: ${triggerError}\n`
+        );
+      }
+
       return [];
     }
   }
