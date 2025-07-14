@@ -202,6 +202,9 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: false,
         openFiles: new Set(),
+        diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -257,6 +260,9 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: false,
         openFiles: new Set(),
+        diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -558,6 +564,8 @@ describe('LSPClient', () => {
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -603,6 +611,8 @@ describe('LSPClient', () => {
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -685,6 +695,8 @@ describe('LSPClient', () => {
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
@@ -726,6 +738,8 @@ describe('LSPClient', () => {
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
+        lastDiagnosticUpdate: new Map(),
+        diagnosticVersions: new Map(),
       };
 
       const getServerSpy = spyOn(
