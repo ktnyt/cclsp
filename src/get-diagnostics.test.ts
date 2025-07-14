@@ -180,7 +180,7 @@ describe('get_diagnostics MCP tool', () => {
 
     await createHandler({ file_path: '/absolute/path/to/file.ts' }, mockLspClient);
 
-    expect(mockLspClient.getDiagnostics).toHaveBeenCalledWith('/absolute/path/to/file.ts');
+    expect(mockLspClient.getDiagnostics).toHaveBeenCalledWith(resolve('/absolute/path/to/file.ts'));
   });
 
   it('should handle error from getDiagnostics', async () => {

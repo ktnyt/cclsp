@@ -17,6 +17,7 @@ import type {
   SymbolMatch,
 } from './types.js';
 import { SymbolKind } from './types.js';
+import { pathToUri } from './utils.js';
 
 interface LSPMessage {
   jsonrpc: string;
@@ -223,10 +224,10 @@ export class LSPClient {
           workspaceFolders: true,
         },
       },
-      rootUri: `file://${serverConfig.rootDir || process.cwd()}`,
+      rootUri: pathToUri(serverConfig.rootDir || process.cwd()),
       workspaceFolders: [
         {
-          uri: `file://${serverConfig.rootDir || process.cwd()}`,
+          uri: pathToUri(serverConfig.rootDir || process.cwd()),
           name: 'workspace',
         },
       ],
@@ -429,7 +430,7 @@ export class LSPClient {
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
-      const uri = `file://${filePath}`;
+      const uri = pathToUri(filePath);
       const languageId = this.getLanguageId(filePath);
 
       process.stderr.write(
@@ -550,7 +551,7 @@ export class LSPClient {
 
     process.stderr.write('[DEBUG findDefinition] Sending textDocument/definition request\n');
     const result = await this.sendRequest(serverState.process, 'textDocument/definition', {
-      textDocument: { uri: `file://${filePath}` },
+      textDocument: { uri: pathToUri(filePath) },
       position,
     });
 
@@ -607,7 +608,7 @@ export class LSPClient {
     );
 
     const result = await this.sendRequest(serverState.process, 'textDocument/references', {
-      textDocument: { uri: `file://${filePath}` },
+      textDocument: { uri: pathToUri(filePath) },
       position,
       context: { includeDeclaration },
     });
@@ -657,7 +658,7 @@ export class LSPClient {
 
     process.stderr.write('[DEBUG renameSymbol] Sending textDocument/rename request\n');
     const result = await this.sendRequest(serverState.process, 'textDocument/rename', {
-      textDocument: { uri: `file://${filePath}` },
+      textDocument: { uri: pathToUri(filePath) },
       position,
       newName,
     });
@@ -698,7 +699,7 @@ export class LSPClient {
     process.stderr.write(`[DEBUG] Requesting documentSymbol for: ${filePath}\n`);
 
     const result = await this.sendRequest(serverState.process, 'textDocument/documentSymbol', {
-      textDocument: { uri: `file://${filePath}` },
+      textDocument: { uri: pathToUri(filePath) },
     });
 
     process.stderr.write(
@@ -1068,7 +1069,7 @@ export class LSPClient {
     await this.ensureFileOpen(serverState, filePath);
 
     // First, check if we have cached diagnostics from publishDiagnostics
-    const fileUri = `file://${filePath}`;
+    const fileUri = pathToUri(filePath);
     const cachedDiagnostics = serverState.diagnostics.get(fileUri);
 
     if (cachedDiagnostics !== undefined) {

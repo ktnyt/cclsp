@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
+import { pathToUri } from './utils.js';
 
 // Type for accessing private methods in tests
 type LSPClientInternal = {
@@ -577,14 +578,14 @@ describe('LSPClient', () => {
         items: mockDiagnostics,
       });
 
-      const result = await client.getDiagnostics('test.ts');
+      const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual(mockDiagnostics);
       expect(sendRequestSpy).toHaveBeenCalledWith(
         mockServerState.process,
         'textDocument/diagnostic',
         {
-          textDocument: { uri: 'file://test.ts' },
+          textDocument: { uri: pathToUri('/test.ts') },
         }
       );
 
@@ -622,7 +623,7 @@ describe('LSPClient', () => {
         resultId: 'test-result-id',
       });
 
-      const result = await client.getDiagnostics('test.ts');
+      const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual([]);
 
@@ -650,7 +651,7 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         openFiles: new Set(),
-        diagnostics: new Map([['file://test.ts', mockDiagnostics]]),
+        diagnostics: new Map([[pathToUri('/test.ts'), mockDiagnostics]]),
       };
 
       const getServerSpy = spyOn(
@@ -663,7 +664,7 @@ describe('LSPClient', () => {
       ).mockResolvedValue(undefined);
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-      const result = await client.getDiagnostics('test.ts');
+      const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual(mockDiagnostics);
       expect(stderrSpy).toHaveBeenCalledWith(
@@ -703,7 +704,7 @@ describe('LSPClient', () => {
 
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-      const result = await client.getDiagnostics('test.ts');
+      const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual([]);
       expect(stderrSpy).toHaveBeenCalledWith(
@@ -742,7 +743,7 @@ describe('LSPClient', () => {
         'sendRequest'
       ).mockResolvedValue({ unexpected: 'response' });
 
-      const result = await client.getDiagnostics('test.ts');
+      const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual([]);
 

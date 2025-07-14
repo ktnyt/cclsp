@@ -5,6 +5,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { LSPClient } from './src/lsp-client.js';
+import { uriToPath } from './src/utils.js';
 
 // Handle subcommands
 const args = process.argv.slice(2);
@@ -210,7 +211,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (locations.length > 0) {
             const locationResults = locations
               .map((loc) => {
-                const filePath = loc.uri.replace('file://', '');
+                const filePath = uriToPath(loc.uri);
                 const { start, end } = loc.range;
                 return `${filePath}:${start.line + 1}:${start.character + 1}`;
               })
@@ -301,7 +302,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (locations.length > 0) {
             const locationResults = locations
               .map((loc) => {
-                const filePath = loc.uri.replace('file://', '');
+                const filePath = uriToPath(loc.uri);
                 const { start, end } = loc.range;
                 return `${filePath}:${start.line + 1}:${start.character + 1}`;
               })
@@ -403,7 +404,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (workspaceEdit?.changes && Object.keys(workspaceEdit.changes).length > 0) {
           const changes = [];
           for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
-            const filePath = uri.replace('file://', '');
+            const filePath = uriToPath(uri);
             changes.push(`File: ${filePath}`);
             for (const edit of edits) {
               const { start, end } = edit.range;
@@ -469,7 +470,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (workspaceEdit?.changes && Object.keys(workspaceEdit.changes).length > 0) {
           const changes = [];
           for (const [uri, edits] of Object.entries(workspaceEdit.changes)) {
-            const filePath = uri.replace('file://', '');
+            const filePath = uriToPath(uri);
             changes.push(`File: ${filePath}`);
             for (const edit of edits) {
               const { start, end } = edit.range;
