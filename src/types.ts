@@ -125,3 +125,45 @@ export interface SymbolMatch {
   };
   detail?: string;
 }
+
+export enum DiagnosticSeverity {
+  Error = 1,
+  Warning = 2,
+  Information = 3,
+  Hint = 4,
+}
+
+export interface DiagnosticRelatedInformation {
+  location: Location;
+  message: string;
+}
+
+export interface CodeDescription {
+  href: string;
+}
+
+export interface Diagnostic {
+  range: {
+    start: Position;
+    end: Position;
+  };
+  severity?: DiagnosticSeverity;
+  code?: number | string;
+  codeDescription?: CodeDescription;
+  source?: string;
+  message: string;
+  tags?: DiagnosticTag[];
+  relatedInformation?: DiagnosticRelatedInformation[];
+  data?: unknown;
+}
+
+export enum DiagnosticTag {
+  Unnecessary = 1,
+  Deprecated = 2,
+}
+
+export interface DocumentDiagnosticReport {
+  kind: 'full' | 'unchanged';
+  resultId?: string;
+  items?: Diagnostic[];
+}

@@ -1,13 +1,41 @@
 {
   "servers": [
     {
-      "extensions": ["js", "ts", "jsx", "tsx"],
-      "command": ["npx", "--", "tsgo", "lsp", "--stdio"],
+      "extensions": [
+        "js",
+        "ts",
+        "jsx",
+        "tsx"
+      ],
+      "command": [
+        "npx",
+        "--",
+        "typescript-language-server",
+        "--stdio"
+      ],
       "rootDir": "."
     },
     {
-      "extensions": ["py", "pyi"],
-      "command": ["uvx", "--from", "python-lsp-server", "pylsp"],
+      "extensions": [
+        "py",
+        "pyi"
+      ],
+      "command": [
+        "uvx",
+        "--from",
+        "python-lsp-server",
+        "pylsp"
+      ],
+      "rootDir": ".",
+      "restartInterval": 5
+    },
+    {
+      "extensions": [
+        "go"
+      ],
+      "command": [
+        "gopls"
+      ],
       "rootDir": "."
     }
   ]

@@ -5,6 +5,8 @@ import { join, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import type {
   Config,
+  Diagnostic,
+  DocumentDiagnosticReport,
   DocumentSymbol,
   LSPError,
   LSPLocation,
@@ -210,6 +212,10 @@ export class LSPClient {
           },
           hover: {},
           signatureHelp: {},
+          diagnostic: {
+            dynamicRegistration: false,
+            relatedDocumentSupport: false,
+          },
         },
         workspace: {
           workspaceFolders: true,
@@ -246,8 +252,26 @@ export class LSPClient {
     // Send the initialized notification after receiving the initialize response
     await this.sendNotification(childProcess, 'initialized', {});
 
-    // Wait for the server to send the initialized notification back
-    await initializationPromise;
+    // Wait for the server to send the initialized notification back with timeout
+    const INITIALIZATION_TIMEOUT = 3000; // 3 seconds
+    try {
+      await Promise.race([
+        initializationPromise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Initialization timeout')), INITIALIZATION_TIMEOUT)
+        ),
+      ]);
+    } catch (error) {
+      // If timeout or initialization fails, mark as initialized anyway
+      process.stderr.write(
+        `[DEBUG startServer] Initialization timeout or failed for ${serverConfig.command.join(' ')}, proceeding anyway: ${error}\n`
+      );
+      serverState.initialized = true;
+      if (serverState.initializationResolve) {
+        serverState.initializationResolve();
+        serverState.initializationResolve = undefined;
+      }
+    }
 
     // Set up auto-restart timer if configured
     this.setupRestartTimer(serverState);
@@ -292,7 +316,12 @@ export class LSPClient {
     process.stdin?.write(header + content);
   }
 
-  private sendRequest(process: ChildProcess, method: string, params: unknown): Promise<unknown> {
+  private sendRequest(
+    process: ChildProcess,
+    method: string,
+    params: unknown,
+    timeout = 30000
+  ): Promise<unknown> {
     const id = this.nextId++;
     const message: LSPMessage = {
       jsonrpc: '2.0',
@@ -302,7 +331,22 @@ export class LSPClient {
     };
 
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
+      const timeoutId = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`LSP request timeout: ${method} (${timeout}ms)`));
+      }, timeout);
+
+      this.pendingRequests.set(id, {
+        resolve: (value: unknown) => {
+          clearTimeout(timeoutId);
+          resolve(value);
+        },
+        reject: (reason?: unknown) => {
+          clearTimeout(timeoutId);
+          reject(reason);
+        },
+      });
+
       this.sendMessage(process, message);
     });
   }
@@ -999,6 +1043,57 @@ export class LSPClient {
 
     const combinedWarning = [validationWarning, fallbackWarning].filter(Boolean).join(' ');
     return { matches, warning: combinedWarning || undefined };
+  }
+
+  async getDiagnostics(filePath: string): Promise<Diagnostic[]> {
+    process.stderr.write(`[DEBUG getDiagnostics] Requesting diagnostics for ${filePath}\n`);
+
+    const serverState = await this.getServer(filePath);
+
+    // Wait for the server to be fully initialized
+    await serverState.initializationPromise;
+
+    // Ensure the file is opened and synced with the LSP server
+    await this.ensureFileOpen(serverState, filePath);
+
+    process.stderr.write('[DEBUG getDiagnostics] Sending textDocument/diagnostic request\n');
+
+    try {
+      const result = await this.sendRequest(serverState.process, 'textDocument/diagnostic', {
+        textDocument: { uri: `file://${filePath}` },
+      });
+
+      process.stderr.write(
+        `[DEBUG getDiagnostics] Result type: ${typeof result}, has kind: ${result && typeof result === 'object' && 'kind' in result}\n`
+      );
+
+      if (result && typeof result === 'object' && 'kind' in result) {
+        const report = result as DocumentDiagnosticReport;
+
+        if (report.kind === 'full' && report.items) {
+          process.stderr.write(
+            `[DEBUG getDiagnostics] Full report with ${report.items.length} diagnostics\n`
+          );
+          return report.items;
+        }
+        if (report.kind === 'unchanged') {
+          process.stderr.write('[DEBUG getDiagnostics] Unchanged report (no new diagnostics)\n');
+          return [];
+        }
+      }
+
+      process.stderr.write(
+        '[DEBUG getDiagnostics] Unexpected response format, returning empty array\n'
+      );
+      return [];
+    } catch (error) {
+      // Some LSP servers may not support textDocument/diagnostic
+      // Try falling back to waiting for publishDiagnostics notifications
+      process.stderr.write(
+        `[DEBUG getDiagnostics] textDocument/diagnostic not supported or failed: ${error}. This is expected for some LSP servers.\n`
+      );
+      return [];
+    }
   }
 
   async preloadServers(projectDir: string = process.cwd(), debug = true): Promise<void> {

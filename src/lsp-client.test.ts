@@ -525,4 +525,182 @@ describe('LSPClient', () => {
       clearTimeoutSpy.mockRestore();
     });
   });
+
+  describe('getDiagnostics', () => {
+    it('should return diagnostics when server supports textDocument/diagnostic', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockDiagnostics = [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 10 },
+          },
+          severity: 1, // Error
+          message: 'Test error message',
+          source: 'test',
+        },
+        {
+          range: {
+            start: { line: 5, character: 2 },
+            end: { line: 5, character: 8 },
+          },
+          severity: 2, // Warning
+          message: 'Test warning message',
+          source: 'test',
+        },
+      ];
+
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        process: { stdin: { write: jest.fn() } },
+        initialized: true,
+        openFiles: new Set(),
+      };
+
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+
+      const ensureFileOpenSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'ensureFileOpen'
+      ).mockResolvedValue(undefined);
+
+      const sendRequestSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'sendRequest'
+      ).mockResolvedValue({
+        kind: 'full',
+        items: mockDiagnostics,
+      });
+
+      const result = await client.getDiagnostics('test.ts');
+
+      expect(result).toEqual(mockDiagnostics);
+      expect(sendRequestSpy).toHaveBeenCalledWith(
+        mockServerState.process,
+        'textDocument/diagnostic',
+        {
+          textDocument: { uri: 'file://test.ts' },
+        }
+      );
+
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
+      sendRequestSpy.mockRestore();
+    });
+
+    it('should return empty array for unchanged report', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        process: { stdin: { write: jest.fn() } },
+        initialized: true,
+        openFiles: new Set(),
+      };
+
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+
+      const ensureFileOpenSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'ensureFileOpen'
+      ).mockResolvedValue(undefined);
+
+      const sendRequestSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'sendRequest'
+      ).mockResolvedValue({
+        kind: 'unchanged',
+        resultId: 'test-result-id',
+      });
+
+      const result = await client.getDiagnostics('test.ts');
+
+      expect(result).toEqual([]);
+
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
+      sendRequestSpy.mockRestore();
+    });
+
+    it('should handle server not supporting textDocument/diagnostic', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        process: { stdin: { write: jest.fn() } },
+        initialized: true,
+        openFiles: new Set(),
+      };
+
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+
+      const ensureFileOpenSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'ensureFileOpen'
+      ).mockResolvedValue(undefined);
+
+      const sendRequestSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'sendRequest'
+      ).mockRejectedValue(new Error('Method not found'));
+
+      const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+      const result = await client.getDiagnostics('test.ts');
+
+      expect(result).toEqual([]);
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringContaining('textDocument/diagnostic not supported or failed')
+      );
+
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
+      sendRequestSpy.mockRestore();
+      stderrSpy.mockRestore();
+    });
+
+    it('should handle unexpected response format', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        process: { stdin: { write: jest.fn() } },
+        initialized: true,
+        openFiles: new Set(),
+      };
+
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+
+      const ensureFileOpenSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'ensureFileOpen'
+      ).mockResolvedValue(undefined);
+
+      const sendRequestSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'sendRequest'
+      ).mockResolvedValue({ unexpected: 'response' });
+
+      const result = await client.getDiagnostics('test.ts');
+
+      expect(result).toEqual([]);
+
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
+      sendRequestSpy.mockRestore();
+    });
+  });
 });

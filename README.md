@@ -32,6 +32,7 @@ https://github.com/user-attachments/assets/52980f32-64d6-4b78-9cbf-18d6ae120cdd
   - [`find_definition`](#find_definition)
   - [`find_references`](#find_references)
   - [`rename_symbol`](#rename_symbol)
+  - [`get_diagnostics`](#get_diagnostics)
 - [💡 Real-world Examples](#-real-world-examples)
   - [Finding Function Definitions](#finding-function-definitions)
   - [Finding All References](#finding-all-references)
@@ -381,6 +382,13 @@ Rename a symbol at a specific position in a file. Returns the file changes neede
 - `new_name`: The new name for the symbol
 - `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
 
+### `get_diagnostics`
+
+Get language diagnostics (errors, warnings, hints) for a file. Uses LSP textDocument/diagnostic to pull current diagnostics.
+
+**Parameters:**
+- `file_path`: The path to the file
+
 ## 💡 Real-world Examples
 
 ### Finding Function Definitions
@@ -419,6 +427,20 @@ Claude: I'll rename `getUserData` to `fetchUserProfile`
 > Using cclsp.rename_symbol at line 55, character 10
 
 Result: 12 files will be updated with the new name
+```
+
+### Checking File Diagnostics
+
+When analyzing code quality:
+
+```
+Claude: Let me check for any errors or warnings in this file
+> Using cclsp.get_diagnostics
+
+Results: Found 3 diagnostics:
+- Error [TS2304]: Cannot find name 'undefinedVar' (Line 10, Column 5)
+- Warning [no-unused-vars]: 'config' is defined but never used (Line 25, Column 10)
+- Hint: Consider using const instead of let (Line 30, Column 1)
 ```
 
 ## 🔍 Troubleshooting

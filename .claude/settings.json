@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | xargs npx biome check --fix --unsafe"
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | xargs npx biome format --write"
+          }
+        ]
+      }
+    ]
+  }
+}
