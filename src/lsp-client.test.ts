@@ -130,7 +130,7 @@ describe('LSPClient', () => {
         openFiles: new Set(),
       }));
 
-      await client.preloadServers(TEST_DIR, false);
+      await client.preloadServers(false);
 
       // Should attempt to start TypeScript server for .ts and .js files
       expect(startServerSpy).toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe('LSPClient', () => {
 
       // Should not throw error
       await expect(async () => {
-        await client.preloadServers(TEST_DIR, false);
+        await client.preloadServers(false);
       }).not.toThrow();
 
       startServerSpy.mockRestore();
@@ -177,7 +177,7 @@ describe('LSPClient', () => {
       ).mockRejectedValue(new Error('Failed to start server'));
 
       // Should complete without throwing
-      await client.preloadServers(TEST_DIR, false);
+      await client.preloadServers(false);
 
       // Should have logged the error to stderr
       expect(stderrSpy).toHaveBeenCalled();
