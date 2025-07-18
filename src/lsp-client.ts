@@ -1261,25 +1261,45 @@ export class LSPClient {
     }
   }
 
-  async preloadServers(projectDir: string = process.cwd(), debug = true): Promise<void> {
+  async preloadServers(debug = true): Promise<void> {
     if (debug) {
-      process.stderr.write(`Scanning project directory for supported file types: ${projectDir}\n`);
-    }
-
-    const ig = await loadGitignore(projectDir);
-    const foundExtensions = await scanDirectoryForExtensions(projectDir, 3, ig, debug);
-    if (debug) {
-      process.stderr.write(`Found extensions: ${Array.from(foundExtensions).join(', ')}\n`);
+      process.stderr.write('Scanning configured server directories for supported file types\n');
     }
 
     const serversToStart = new Set<LSPServerConfig>();
 
-    for (const extension of foundExtensions) {
-      const serverConfig = this.config.servers.find((server) =>
-        server.extensions.includes(extension)
-      );
-      if (serverConfig) {
-        serversToStart.add(serverConfig);
+    // Scan each server's rootDir for its configured extensions
+    for (const serverConfig of this.config.servers) {
+      const serverDir = serverConfig.rootDir || process.cwd();
+
+      if (debug) {
+        process.stderr.write(
+          `Scanning ${serverDir} for extensions: ${serverConfig.extensions.join(', ')}\n`
+        );
+      }
+
+      try {
+        const ig = await loadGitignore(serverDir);
+        const foundExtensions = await scanDirectoryForExtensions(serverDir, 3, ig, false);
+
+        // Check if any of this server's extensions are found in its rootDir
+        const hasMatchingExtensions = serverConfig.extensions.some((ext) =>
+          foundExtensions.has(ext)
+        );
+
+        if (hasMatchingExtensions) {
+          serversToStart.add(serverConfig);
+          if (debug) {
+            const matchingExts = serverConfig.extensions.filter((ext) => foundExtensions.has(ext));
+            process.stderr.write(
+              `Found matching extensions in ${serverDir}: ${matchingExts.join(', ')}\n`
+            );
+          }
+        }
+      } catch (error) {
+        if (debug) {
+          process.stderr.write(`Failed to scan ${serverDir}: ${error}\n`);
+        }
       }
     }
 
