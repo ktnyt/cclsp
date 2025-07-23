@@ -1315,6 +1315,181 @@ export class LSPClient {
     }
   }
 
+  async getClassMembers(filePath: string, className: string): Promise<SymbolMatch[]> {
+    const symbols = await this.getDocumentSymbols(filePath);
+    const members: SymbolMatch[] = [];
+
+    process.stderr.write(
+      `[DEBUG getClassMembers] Looking for class "${className}" members in ${filePath}\n`
+    );
+
+    if (this.isDocumentSymbolArray(symbols)) {
+      // Handle hierarchical DocumentSymbol format
+      const classSymbol = this.findClassSymbol(symbols, className);
+      if (classSymbol?.children) {
+        for (const child of classSymbol.children) {
+          // Get hover info for the member to get type information
+          const hoverInfo = await this.getHoverInfo(filePath, child.selectionRange.start);
+          const detail = hoverInfo || child.detail;
+
+          members.push({
+            name: child.name,
+            kind: child.kind,
+            position: child.selectionRange.start,
+            range: child.range,
+            detail: detail,
+          });
+        }
+      }
+    } else {
+      // Handle flat SymbolInformation format
+      // Find the class symbol first
+      const classSymbol = symbols.find((s) => s.name === className && s.kind === SymbolKind.Class);
+
+      if (classSymbol) {
+        // Find all symbols that are contained within the class
+        for (const symbol of symbols) {
+          if (symbol.containerName === className) {
+            const position = await this.findSymbolPositionInFile(filePath, symbol);
+            const hoverInfo = await this.getHoverInfo(filePath, position);
+
+            members.push({
+              name: symbol.name,
+              kind: symbol.kind,
+              position: position,
+              range: symbol.location.range,
+              detail: hoverInfo,
+            });
+          }
+        }
+      }
+    }
+
+    process.stderr.write(
+      `[DEBUG getClassMembers] Found ${members.length} members for class "${className}"\n`
+    );
+
+    return members;
+  }
+
+  private findClassSymbol(symbols: DocumentSymbol[], className: string): DocumentSymbol | null {
+    for (const symbol of symbols) {
+      if (symbol.name === className && symbol.kind === SymbolKind.Class) {
+        return symbol;
+      }
+      if (symbol.children) {
+        const found = this.findClassSymbol(symbol.children, className);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  async getMethodSignature(
+    filePath: string,
+    methodName: string,
+    className?: string
+  ): Promise<{ name: string; position: Position; signature: string }[]> {
+    const signatures: { name: string; position: Position; signature: string }[] = [];
+
+    process.stderr.write(
+      `[DEBUG getMethodSignature] Looking for method "${methodName}"${className ? ` in class "${className}"` : ''} in ${filePath}\n`
+    );
+
+    // Find all symbols matching the method name
+    const result = await this.findSymbolsByName(filePath, methodName, 'method');
+    const { matches } = result;
+
+    // If className is specified, filter to only methods in that class
+    let filteredMatches = matches;
+    if (className) {
+      const symbols = await this.getDocumentSymbols(filePath);
+      filteredMatches = [];
+
+      if (this.isDocumentSymbolArray(symbols)) {
+        const classSymbol = this.findClassSymbol(symbols, className);
+        if (classSymbol?.children) {
+          for (const match of matches) {
+            // Check if this match is within the class
+            for (const child of classSymbol.children) {
+              if (
+                child.name === match.name &&
+                child.selectionRange.start.line === match.position.line &&
+                child.selectionRange.start.character === match.position.character
+              ) {
+                filteredMatches.push(match);
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        // For SymbolInformation, use containerName
+        filteredMatches = matches.filter((match) => {
+          const symbol = symbols.find(
+            (s) =>
+              s.name === match.name &&
+              s.location.range.start.line === match.range.start.line &&
+              s.location.range.start.character === match.range.start.character
+          );
+          return symbol && symbol.containerName === className;
+        });
+      }
+    }
+
+    // Get hover info for each match
+    for (const match of filteredMatches) {
+      const hoverInfo = await this.getHoverInfo(filePath, match.position);
+      if (hoverInfo) {
+        signatures.push({
+          name: match.name,
+          position: match.position,
+          signature: hoverInfo,
+        });
+      }
+    }
+
+    process.stderr.write(
+      `[DEBUG getMethodSignature] Found ${signatures.length} signatures for method "${methodName}"\n`
+    );
+
+    return signatures;
+  }
+
+  private async getHoverInfo(filePath: string, position: Position): Promise<string | undefined> {
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+
+    try {
+      const result = await this.sendRequest(serverState.process, 'textDocument/hover', {
+        textDocument: { uri: pathToUri(filePath) },
+        position: position,
+      });
+
+      if (result && typeof result === 'object' && 'contents' in result) {
+        const contents = (result as { contents: unknown }).contents;
+
+        // Handle different formats of hover contents
+        if (typeof contents === 'string') {
+          return contents;
+        }
+        if (typeof contents === 'object' && 'value' in contents) {
+          return (contents as { value: string }).value;
+        }
+        if (Array.isArray(contents)) {
+          return contents
+            .map((item) => (typeof item === 'string' ? item : (item as { value: string }).value))
+            .filter(Boolean)
+            .join('\n');
+        }
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG getHoverInfo] Error getting hover info: ${error}\n`);
+    }
+
+    return undefined;
+  }
+
   dispose(): void {
     for (const serverState of this.servers.values()) {
       // Clear restart timer if exists

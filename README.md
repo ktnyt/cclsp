@@ -33,6 +33,8 @@ https://github.com/user-attachments/assets/52980f32-64d6-4b78-9cbf-18d6ae120cdd
   - [`find_references`](#find_references)
   - [`rename_symbol`](#rename_symbol)
   - [`get_diagnostics`](#get_diagnostics)
+  - [`get_class_members`](#get_class_members)
+  - [`get_method_signature`](#get_method_signature)
 - [💡 Real-world Examples](#-real-world-examples)
   - [Finding Function Definitions](#finding-function-definitions)
   - [Finding All References](#finding-all-references)
@@ -55,6 +57,9 @@ When using AI-powered coding assistants like Claude, you often need to navigate 
 
 - **Go to Definition**: Find where symbols are defined
 - **Find References**: Locate all references to a symbol
+- **Class Exploration**: List all members of a class with their types
+- **Method Signatures**: Get full method signatures with parameters and return types
+- **Code Diagnostics**: Get errors, warnings, and hints for your code
 - **Multi-language Support**: Configurable LSP servers for different file types
 - **TypeScript**: Built-in support via typescript-language-server
 - **Python**: Support via python-lsp-server (pylsp)
@@ -389,6 +394,23 @@ Get language diagnostics (errors, warnings, hints) for a file. Supports both pul
 **Parameters:**
 - `file_path`: The path to the file
 
+### `get_class_members`
+
+List all properties and methods of a class. Returns members with their types and signatures using LSP hover information.
+
+**Parameters:**
+- `file_path`: The path to the file containing the class
+- `class_name`: The name of the class
+
+### `get_method_signature`
+
+Show full method definition with parameters and return type using LSP hover information. Particularly useful for understanding API methods and their expected parameters.
+
+**Parameters:**
+- `file_path`: The path to the file containing the method
+- `method_name`: The name of the method
+- `class_name`: Optional - The name of the class containing the method (helps narrow results)
+
 ## 💡 Real-world Examples
 
 ### Finding Function Definitions
@@ -441,6 +463,38 @@ Results: Found 3 diagnostics:
 - Error [TS2304]: Cannot find name 'undefinedVar' (Line 10, Column 5)
 - Warning [no-unused-vars]: 'config' is defined but never used (Line 25, Column 10)
 - Hint: Consider using const instead of let (Line 30, Column 1)
+```
+
+### Exploring Class Structure
+
+When understanding API architecture:
+
+```
+Claude: Let me explore the ApiService class structure
+> Using cclsp.get_class_members for class "ApiService"
+
+Results: Found 8 members in class "ApiService":
+• constructor (constructor) at src/services/api.ts:10:3
+• baseUrl (property) at src/services/api.ts:12:3
+  private baseUrl: string
+• request (method) at src/services/api.ts:20:3
+  async request<T>(endpoint: string, options?: RequestOptions): Promise<T>
+• get (method) at src/services/api.ts:35:3
+  async get<T>(endpoint: string): Promise<T>
+• post (method) at src/services/api.ts:40:3
+  async post<T>(endpoint: string, data: unknown): Promise<T>
+```
+
+### Getting Method Signatures
+
+When understanding function APIs:
+
+```
+Claude: I need to understand the formatDate method signature
+> Using cclsp.get_method_signature for method "formatDate"
+
+Method: formatDate at src/utils/date.ts:15:10
+formatDate(date: Date | string, format?: string): string
 ```
 
 ## 🔍 Troubleshooting
