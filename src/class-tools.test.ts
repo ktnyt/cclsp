@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, jest, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -42,6 +42,13 @@ describe('Class Tools', () => {
     client = new LSPClient(TEST_CONFIG_PATH);
   });
 
+  afterEach(() => {
+    // Dispose of the client to prevent real LSP servers from running
+    if (client) {
+      client.dispose();
+    }
+  });
+
   describe('getClassMembers', () => {
     it('should return class members with hierarchical DocumentSymbol format', async () => {
       const testFilePath = join(TEST_DIR, 'test-class.ts');
@@ -75,7 +82,7 @@ describe('Class Tools', () => {
             {
               name: 'myProperty',
               kind: SymbolKind.Property,
-              detail: 'string',
+              detail: 'myProperty: string',
               range: {
                 start: { line: 4, character: 2 },
                 end: { line: 4, character: 25 },
@@ -120,6 +127,14 @@ describe('Class Tools', () => {
         }
       );
 
+      // Mock getSignatureHelp to prevent real LSP calls
+      const getSignatureHelpSpy = spyOn(client as any, 'getSignatureHelp').mockResolvedValue(
+        undefined
+      );
+
+      // Mock getTypeDefinition to prevent real LSP calls
+      const getTypeDefinitionSpy = spyOn(client as any, 'getTypeDefinition').mockResolvedValue([]);
+
       const members = await client.getClassMembers(testFilePath, 'TestClass');
 
       expect(getDocumentSymbolsSpy).toHaveBeenCalledWith(testFilePath);
@@ -135,6 +150,7 @@ describe('Class Tools', () => {
           end: { line: 3, character: 3 },
         },
         detail: undefined,
+        typeInfo: undefined,
       });
 
       // Check property with hover info
@@ -147,6 +163,9 @@ describe('Class Tools', () => {
           end: { line: 4, character: 25 },
         },
         detail: 'myProperty: string',
+        typeInfo: {
+          returnType: 'string',
+        },
       });
 
       // Check method with hover info
@@ -159,6 +178,10 @@ describe('Class Tools', () => {
           end: { line: 8, character: 3 },
         },
         detail: '(method) TestClass.myMethod(): void',
+        typeInfo: {
+          returnType: 'void',
+          parameters: [],
+        },
       });
     });
 
@@ -236,6 +259,14 @@ describe('Class Tools', () => {
         }
       );
 
+      // Mock getSignatureHelp to prevent real LSP calls
+      const getSignatureHelpSpy = spyOn(client as any, 'getSignatureHelp').mockResolvedValue(
+        undefined
+      );
+
+      // Mock getTypeDefinition to prevent real LSP calls
+      const getTypeDefinitionSpy = spyOn(client as any, 'getTypeDefinition').mockResolvedValue([]);
+
       const members = await client.getClassMembers(testFilePath, 'TestClass');
 
       expect(getDocumentSymbolsSpy).toHaveBeenCalledWith(testFilePath);
@@ -252,6 +283,9 @@ describe('Class Tools', () => {
           end: { line: 4, character: 25 },
         },
         detail: 'myProperty: string',
+        typeInfo: {
+          returnType: 'string',
+        },
       });
 
       // Check method
@@ -264,6 +298,10 @@ describe('Class Tools', () => {
           end: { line: 8, character: 3 },
         },
         detail: '(method) TestClass.myMethod(): void',
+        typeInfo: {
+          returnType: 'void',
+          parameters: [],
+        },
       });
     });
 
@@ -286,10 +324,87 @@ describe('Class Tools', () => {
       ];
 
       spyOn(client, 'getDocumentSymbols').mockResolvedValue(mockDocumentSymbols);
+      spyOn(client as any, 'getSignatureHelp').mockResolvedValue(undefined);
+      spyOn(client as any, 'getTypeDefinition').mockResolvedValue([]);
 
       const members = await client.getClassMembers(testFilePath, 'NonExistentClass');
 
       expect(members).toHaveLength(0);
+    });
+
+    it('should include type definition location for properties', async () => {
+      const testFilePath = join(TEST_DIR, 'test-class.ts');
+
+      const mockDocumentSymbols: DocumentSymbol[] = [
+        {
+          name: 'TestClass',
+          kind: SymbolKind.Class,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 10, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 6 },
+            end: { line: 0, character: 15 },
+          },
+          children: [
+            {
+              name: 'breakType',
+              kind: SymbolKind.Property,
+              detail: 'BreakType',
+              range: {
+                start: { line: 2, character: 2 },
+                end: { line: 2, character: 30 },
+              },
+              selectionRange: {
+                start: { line: 2, character: 2 },
+                end: { line: 2, character: 11 },
+              },
+            },
+          ],
+        },
+      ];
+
+      spyOn(client, 'getDocumentSymbols').mockResolvedValue(mockDocumentSymbols);
+
+      // Mock getHoverInfo to return property type info
+      spyOn(client as any, 'getHoverInfo').mockResolvedValue('breakType: BreakType');
+
+      // Mock getTypeDefinition to return the type's definition location
+      spyOn(client as any, 'getTypeDefinition').mockResolvedValue([
+        {
+          uri: 'file:///path/to/BreakType.cs',
+          range: {
+            start: { line: 9, character: 4 },
+            end: { line: 20, character: 5 },
+          },
+        },
+      ]);
+
+      // Mock ensureFileOpen
+      spyOn(client as any, 'ensureFileOpen').mockResolvedValue(undefined);
+
+      const members = await client.getClassMembers(testFilePath, 'TestClass');
+
+      expect(members).toHaveLength(1);
+      expect(members[0]).toEqual({
+        name: 'breakType',
+        kind: SymbolKind.Property,
+        position: { line: 2, character: 2 },
+        range: {
+          start: { line: 2, character: 2 },
+          end: { line: 2, character: 30 },
+        },
+        detail: 'breakType: BreakType',
+        typeInfo: {
+          returnType: 'BreakType',
+          definitionLocation: {
+            uri: 'file:///path/to/BreakType.cs',
+            line: 9,
+            character: 4,
+          },
+        },
+      });
     });
   });
 
@@ -319,16 +434,32 @@ describe('Class Tools', () => {
         '(method) DateFormatter.formatDate(date: Date | string, format?: string): string'
       );
 
+      // Mock getSignatureHelp to return proper signature data
+      const getSignatureHelpSpy = spyOn(client as any, 'getSignatureHelp').mockResolvedValue({
+        signatures: [
+          {
+            label: '(date: Date | string, format?: string): string',
+            parameters: [{ label: 'date: Date | string' }, { label: 'format?: string' }],
+          },
+        ],
+      });
+
       const signatures = await client.getMethodSignature(testFilePath, 'formatDate');
 
       expect(findSymbolsByNameSpy).toHaveBeenCalledWith(testFilePath, 'formatDate', 'method');
-      expect(getHoverInfoSpy).toHaveBeenCalledWith(testFilePath, { line: 10, character: 5 });
+      expect(getSignatureHelpSpy).toHaveBeenCalledWith(testFilePath, { line: 10, character: 5 });
       expect(signatures).toHaveLength(1);
       expect(signatures[0]).toEqual({
         name: 'formatDate',
         position: { line: 10, character: 5 },
-        signature:
-          '(method) DateFormatter.formatDate(date: Date | string, format?: string): string',
+        signature: '(date: Date | string, format?: string): string',
+        typeInfo: {
+          returnType: 'string',
+          parameters: [
+            { name: 'date', type: 'Date | string' },
+            { name: 'format', type: 'string', isOptional: true },
+          ],
+        },
       });
     });
 
@@ -405,10 +536,122 @@ describe('Class Tools', () => {
         }
       );
 
+      // Mock getSignatureHelp
+      spyOn(client as any, 'getSignatureHelp').mockResolvedValue({
+        signatures: [
+          {
+            label: 'ComponentA.render(): ReactElement',
+            parameters: [],
+          },
+        ],
+      });
+
       const signatures = await client.getMethodSignature(testFilePath, 'render', 'ComponentA');
 
       expect(signatures).toHaveLength(1);
-      expect(signatures[0].signature).toBe('(method) ComponentA.render(): ReactElement');
+      if (signatures[0]) {
+        expect(signatures[0].signature).toBe('ComponentA.render(): ReactElement');
+        expect(signatures[0].typeInfo).toEqual({
+          returnType: 'ReactElement',
+          parameters: [],
+        });
+      }
+    });
+
+    it('should include parameter type definition locations', async () => {
+      const testFilePath = join(TEST_DIR, 'test-method.ts');
+
+      const mockSymbolMatches: SymbolMatch[] = [
+        {
+          name: 'processBreak',
+          kind: SymbolKind.Method,
+          position: { line: 10, character: 5 },
+          range: {
+            start: { line: 10, character: 0 },
+            end: { line: 15, character: 1 },
+          },
+        },
+      ];
+
+      spyOn(client, 'findSymbolsByName').mockResolvedValue({ matches: mockSymbolMatches });
+
+      // Mock getSignatureHelp to return signature with parameters
+      spyOn(client as any, 'getSignatureHelp').mockResolvedValue({
+        signatures: [
+          {
+            label: '(breakType: BreakType, startTime: DateTime): void',
+            parameters: [{ label: 'breakType: BreakType' }, { label: 'startTime: DateTime' }],
+          },
+        ],
+      });
+
+      // Mock findParameterPositions to return positions for type definitions
+      spyOn(client as any, 'findParameterPositions').mockResolvedValue([
+        { line: 10, character: 20 }, // Position of BreakType
+        { line: 10, character: 40 }, // Position of DateTime
+      ]);
+
+      // Mock getTypeDefinition to return different locations for each type
+      const getTypeDefinitionSpy = spyOn(client as any, 'getTypeDefinition');
+      getTypeDefinitionSpy.mockImplementation((filePath: string, position: Position) => {
+        if (position.character === 20) {
+          // BreakType definition
+          return Promise.resolve([
+            {
+              uri: 'file:///path/to/BreakType.cs',
+              range: {
+                start: { line: 9, character: 4 },
+                end: { line: 20, character: 5 },
+              },
+            },
+          ]);
+        }
+        if (position.character === 40) {
+          // DateTime definition
+          return Promise.resolve([
+            {
+              uri: 'file:///path/to/System/DateTime.cs',
+              range: {
+                start: { line: 100, character: 0 },
+                end: { line: 500, character: 1 },
+              },
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const signatures = await client.getMethodSignature(testFilePath, 'processBreak');
+
+      expect(signatures).toHaveLength(1);
+      expect(signatures[0]).toEqual({
+        name: 'processBreak',
+        position: { line: 10, character: 5 },
+        signature: '(breakType: BreakType, startTime: DateTime): void',
+        typeInfo: {
+          returnType: 'void',
+          parameters: [
+            {
+              name: 'breakType',
+              type: 'BreakType',
+              definitionLocation: {
+                uri: 'file:///path/to/BreakType.cs',
+                line: 9,
+                character: 4,
+              },
+            },
+            {
+              name: 'startTime',
+              type: 'DateTime',
+              definitionLocation: {
+                uri: 'file:///path/to/System/DateTime.cs',
+                line: 100,
+                character: 0,
+              },
+            },
+          ],
+        },
+      });
     });
 
     it('should return empty array when no hover info available', async () => {
@@ -428,6 +671,7 @@ describe('Class Tools', () => {
 
       spyOn(client, 'findSymbolsByName').mockResolvedValue({ matches: mockSymbolMatches });
       spyOn(client as any, 'getHoverInfo').mockResolvedValue(undefined);
+      spyOn(client as any, 'getSignatureHelp').mockResolvedValue(undefined);
 
       const signatures = await client.getMethodSignature(testFilePath, 'someMethod');
 
@@ -447,6 +691,7 @@ describe('Class Tools', () => {
       };
 
       spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      spyOn(client as any, 'ensureFileOpen').mockResolvedValue(undefined);
 
       const sendRequestSpy = spyOn(client as any, 'sendRequest').mockResolvedValue({
         contents: 'function testFunction(): void',
@@ -471,6 +716,7 @@ describe('Class Tools', () => {
       };
 
       spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      spyOn(client as any, 'ensureFileOpen').mockResolvedValue(undefined);
       spyOn(client as any, 'sendRequest').mockResolvedValue({
         contents: { value: 'const myVariable: string' },
       });
@@ -490,6 +736,7 @@ describe('Class Tools', () => {
       };
 
       spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      spyOn(client as any, 'ensureFileOpen').mockResolvedValue(undefined);
       spyOn(client as any, 'sendRequest').mockResolvedValue({
         contents: ['class MyClass', { value: 'A class that does something' }],
       });
@@ -509,6 +756,7 @@ describe('Class Tools', () => {
       };
 
       spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      spyOn(client as any, 'ensureFileOpen').mockResolvedValue(undefined);
       spyOn(client as any, 'sendRequest').mockRejectedValue(new Error('LSP error'));
 
       const stderrSpy = spyOn(process.stderr, 'write');

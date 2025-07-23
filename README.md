@@ -396,11 +396,17 @@ Get language diagnostics (errors, warnings, hints) for a file. Supports both pul
 
 ### `get_class_members`
 
-List all properties and methods of a class. Returns members with their types and signatures using LSP hover information.
+List all properties and methods of a class. Returns members with their types and signatures using LSP hover information, including namespace/package information and detailed parameter types.
 
 **Parameters:**
 - `file_path`: The path to the file containing the class
 - `class_name`: The name of the class
+
+**Enhanced Response Includes:**
+- Full type signatures with documentation
+- Namespace and package information for imported types
+- Parameter details including names, types, optional flags, and default values
+- Return type information for methods
 
 ### `get_method_signature`
 
@@ -410,6 +416,12 @@ Show full method definition with parameters and return type using LSP hover info
 - `file_path`: The path to the file containing the method
 - `method_name`: The name of the method
 - `class_name`: Optional - The name of the class containing the method (helps narrow results)
+
+**Enhanced Response Includes:**
+- Complete method signature with all type information
+- Parsed parameter details with types and default values
+- Namespace/package information for complex types
+- Documentation comments when available
 
 ## 💡 Real-world Examples
 
@@ -477,12 +489,24 @@ Results: Found 8 members in class "ApiService":
 • constructor (constructor) at src/services/api.ts:10:3
 • baseUrl (property) at src/services/api.ts:12:3
   private baseUrl: string
+  Type: string
 • request (method) at src/services/api.ts:20:3
   async request<T>(endpoint: string, options?: RequestOptions): Promise<T>
+  Parameters:
+    - endpoint: string
+    - options?: RequestOptions
+  Returns: Promise<T>
 • get (method) at src/services/api.ts:35:3
   async get<T>(endpoint: string): Promise<T>
+  Parameters:
+    - endpoint: string
+  Returns: Promise<T>
 • post (method) at src/services/api.ts:40:3
   async post<T>(endpoint: string, data: unknown): Promise<T>
+  Parameters:
+    - endpoint: string
+    - data: unknown
+  Returns: Promise<T>
 ```
 
 ### Getting Method Signatures
@@ -495,6 +519,12 @@ Claude: I need to understand the formatDate method signature
 
 Method: formatDate at src/utils/date.ts:15:10
 formatDate(date: Date | string, format?: string): string
+
+Type Details:
+  Parameters:
+    - date: Date | string
+    - format?: string = "YYYY-MM-DD"
+  Returns: string
 ```
 
 ## 🔍 Troubleshooting

@@ -124,6 +124,29 @@ export interface SymbolMatch {
     end: Position;
   };
   detail?: string;
+  typeInfo?: TypeInfo;
+}
+
+export interface TypeInfo {
+  parameters?: ParameterInfo[];
+  returnType?: string;
+  definitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
+}
+
+export interface ParameterInfo {
+  name: string;
+  type: string;
+  isOptional?: boolean;
+  defaultValue?: string;
+  definitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
 }
 
 export enum DiagnosticSeverity {

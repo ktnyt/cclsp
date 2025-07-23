@@ -12,9 +12,11 @@ import type {
   LSPLocation,
   LSPServerConfig,
   Location,
+  ParameterInfo,
   Position,
   SymbolInformation,
   SymbolMatch,
+  TypeInfo,
 } from './types.js';
 import { SymbolKind } from './types.js';
 import { pathToUri } from './utils.js';
@@ -219,6 +221,9 @@ export class LSPClient {
           },
           hover: {},
           signatureHelp: {},
+          typeDefinition: {
+            linkSupport: false,
+          },
           diagnostic: {
             dynamicRegistration: false,
             relatedDocumentSupport: false,
@@ -1328,37 +1333,231 @@ export class LSPClient {
       const classSymbol = this.findClassSymbol(symbols, className);
       if (classSymbol?.children) {
         for (const child of classSymbol.children) {
-          // Get hover info for the member to get type information
-          const hoverInfo = await this.getHoverInfo(filePath, child.selectionRange.start);
-          const detail = hoverInfo || child.detail;
+          // Try multiple approaches to get accurate type information
+          const position = child.selectionRange.start;
+          let typeInfo: TypeInfo | undefined;
+
+          // For methods, try signature help first
+          if (child.kind === SymbolKind.Method || child.kind === SymbolKind.Constructor) {
+            const signatureHelp = await this.getSignatureHelp(filePath, position);
+            if (signatureHelp && signatureHelp.signatures.length > 0) {
+              const sig = signatureHelp.signatures[0];
+              if (sig) {
+                typeInfo = {};
+
+                // Parse return type from signature
+                const returnTypeMatch = sig.label.match(/\)\s*(?::|=>|->)\s*(.+)$/);
+                if (returnTypeMatch?.[1]) {
+                  typeInfo.returnType = returnTypeMatch[1].trim();
+                }
+
+                // Extract parameters
+                if (sig.parameters) {
+                  typeInfo.parameters = [];
+                  for (const param of sig.parameters) {
+                    const paramLabel =
+                      typeof param.label === 'string'
+                        ? param.label
+                        : sig.label.substring(param.label[0], param.label[1]);
+
+                    const paramMatch = paramLabel.match(/(\w+)(\?)?:\s*(.+?)(?:\s*=\s*(.+))?$/);
+                    if (paramMatch) {
+                      const [, name, optional, type, defaultValue] = paramMatch;
+                      const paramInfo: ParameterInfo = {
+                        name: name || '',
+                        type: type?.trim() || paramLabel,
+                      };
+                      if (optional || defaultValue) {
+                        paramInfo.isOptional = true;
+                      }
+                      if (defaultValue) {
+                        paramInfo.defaultValue = defaultValue.trim();
+                      }
+                      typeInfo.parameters.push(paramInfo);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Get hover info for detail and type parsing
+          let hoverInfo: string | undefined;
+          let detail = child.detail;
+
+          // For properties/fields, try type definition
+          if (
+            !typeInfo &&
+            (child.kind === SymbolKind.Property || child.kind === SymbolKind.Field)
+          ) {
+            // First get hover info to extract the type name
+            hoverInfo = await this.getHoverInfo(filePath, position);
+            if (hoverInfo) {
+              detail = hoverInfo;
+              typeInfo = this.parseTypeInfo(hoverInfo, child.name);
+
+              // Now try to get the type definition location
+              const typeDefinitions = await this.getTypeDefinition(filePath, position);
+              if (typeDefinitions.length > 0) {
+                // Get the first type definition location
+                const typeDef = typeDefinitions[0];
+                if (!typeInfo) {
+                  typeInfo = {};
+                }
+                typeInfo.definitionLocation = {
+                  uri: typeDef.uri,
+                  line: typeDef.range.start.line,
+                  character: typeDef.range.start.character,
+                };
+              }
+            }
+          }
+
+          // Fallback to hover info if no type info yet
+          if (!typeInfo) {
+            if (!hoverInfo) {
+              hoverInfo = await this.getHoverInfo(filePath, position);
+            }
+            detail = hoverInfo || child.detail;
+            if (hoverInfo) {
+              typeInfo = this.parseTypeInfo(hoverInfo, child.name);
+
+              // Try to get type definition if we haven't already
+              if (typeInfo && !typeInfo.definitionLocation) {
+                const typeDefinitions = await this.getTypeDefinition(filePath, position);
+                if (typeDefinitions.length > 0) {
+                  const typeDef = typeDefinitions[0];
+                  typeInfo.definitionLocation = {
+                    uri: typeDef.uri,
+                    line: typeDef.range.start.line,
+                    character: typeDef.range.start.character,
+                  };
+                }
+              }
+            }
+          }
 
           members.push({
             name: child.name,
             kind: child.kind,
-            position: child.selectionRange.start,
+            position: position,
             range: child.range,
             detail: detail,
+            typeInfo: typeInfo,
           });
         }
       }
     } else {
       // Handle flat SymbolInformation format
-      // Find the class symbol first
       const classSymbol = symbols.find((s) => s.name === className && s.kind === SymbolKind.Class);
 
       if (classSymbol) {
-        // Find all symbols that are contained within the class
         for (const symbol of symbols) {
           if (symbol.containerName === className) {
             const position = await this.findSymbolPositionInFile(filePath, symbol);
-            const hoverInfo = await this.getHoverInfo(filePath, position);
+            let typeInfo: TypeInfo | undefined;
+
+            // Similar approach for SymbolInformation
+            if (symbol.kind === SymbolKind.Method || symbol.kind === SymbolKind.Constructor) {
+              const signatureHelp = await this.getSignatureHelp(filePath, position);
+              if (signatureHelp && signatureHelp.signatures.length > 0) {
+                const sig = signatureHelp.signatures[0];
+                if (sig) {
+                  typeInfo = {};
+
+                  const returnTypeMatch = sig.label.match(/\)\s*(?::|=>|->)\s*(.+)$/);
+                  if (returnTypeMatch?.[1]) {
+                    typeInfo.returnType = returnTypeMatch[1].trim();
+                  }
+
+                  if (sig.parameters) {
+                    typeInfo.parameters = [];
+                    for (const param of sig.parameters) {
+                      const paramLabel =
+                        typeof param.label === 'string'
+                          ? param.label
+                          : sig.label.substring(param.label[0], param.label[1]);
+
+                      const paramMatch = paramLabel.match(/(\w+)(\?)?:\s*(.+?)(?:\s*=\s*(.+))?$/);
+                      if (paramMatch) {
+                        const [, name, optional, type, defaultValue] = paramMatch;
+                        const paramInfo: ParameterInfo = {
+                          name: name || '',
+                          type: type?.trim() || paramLabel,
+                          isOptional: !!optional || !!defaultValue,
+                        };
+                        if (defaultValue) {
+                          paramInfo.defaultValue = defaultValue.trim();
+                        }
+                        typeInfo.parameters.push(paramInfo);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Get hover info for detail and type parsing
+            let hoverInfo: string | undefined;
+            let detail: string | undefined;
+
+            // For properties/fields, try type definition
+            if (
+              !typeInfo &&
+              (symbol.kind === SymbolKind.Property || symbol.kind === SymbolKind.Field)
+            ) {
+              hoverInfo = await this.getHoverInfo(filePath, position);
+              if (hoverInfo) {
+                detail = hoverInfo;
+                typeInfo = this.parseTypeInfo(hoverInfo, symbol.name);
+
+                // Get type definition location
+                const typeDefinitions = await this.getTypeDefinition(filePath, position);
+                if (typeDefinitions.length > 0) {
+                  const typeDef = typeDefinitions[0];
+                  if (!typeInfo) {
+                    typeInfo = {};
+                  }
+                  typeInfo.definitionLocation = {
+                    uri: typeDef.uri,
+                    line: typeDef.range.start.line,
+                    character: typeDef.range.start.character,
+                  };
+                }
+              }
+            }
+
+            // Fallback to hover info if no type info yet
+            if (!typeInfo) {
+              if (!hoverInfo) {
+                hoverInfo = await this.getHoverInfo(filePath, position);
+              }
+              detail = hoverInfo;
+              if (hoverInfo) {
+                typeInfo = this.parseTypeInfo(hoverInfo, symbol.name);
+
+                // Try to get type definition if we haven't already
+                if (typeInfo && !typeInfo.definitionLocation) {
+                  const typeDefinitions = await this.getTypeDefinition(filePath, position);
+                  if (typeDefinitions.length > 0) {
+                    const typeDef = typeDefinitions[0];
+                    typeInfo.definitionLocation = {
+                      uri: typeDef.uri,
+                      line: typeDef.range.start.line,
+                      character: typeDef.range.start.character,
+                    };
+                  }
+                }
+              }
+            }
 
             members.push({
               name: symbol.name,
               kind: symbol.kind,
               position: position,
               range: symbol.location.range,
-              detail: hoverInfo,
+              detail: detail,
+              typeInfo: typeInfo,
             });
           }
         }
@@ -1389,8 +1588,13 @@ export class LSPClient {
     filePath: string,
     methodName: string,
     className?: string
-  ): Promise<{ name: string; position: Position; signature: string }[]> {
-    const signatures: { name: string; position: Position; signature: string }[] = [];
+  ): Promise<{ name: string; position: Position; signature: string; typeInfo?: TypeInfo }[]> {
+    const signatures: {
+      name: string;
+      position: Position;
+      signature: string;
+      typeInfo?: TypeInfo;
+    }[] = [];
 
     process.stderr.write(
       `[DEBUG getMethodSignature] Looking for method "${methodName}"${className ? ` in class "${className}"` : ''} in ${filePath}\n`
@@ -1437,15 +1641,104 @@ export class LSPClient {
       }
     }
 
-    // Get hover info for each match
+    // Get signature info for each match
     for (const match of filteredMatches) {
-      const hoverInfo = await this.getHoverInfo(filePath, match.position);
-      if (hoverInfo) {
-        signatures.push({
-          name: match.name,
-          position: match.position,
-          signature: hoverInfo,
-        });
+      // Try to get signature help at the method position
+      const signatureHelp = await this.getSignatureHelp(filePath, match.position);
+
+      if (signatureHelp && signatureHelp.signatures.length > 0) {
+        // Use the first signature (usually the most relevant)
+        const sig = signatureHelp.signatures[0];
+        if (sig) {
+          const typeInfo: TypeInfo = {};
+
+          // Parse return type from signature label
+          const returnTypeMatch = sig.label.match(/\)\s*(?::|=>|->)\s*(.+)$/);
+          if (returnTypeMatch?.[1]) {
+            typeInfo.returnType = returnTypeMatch[1].trim();
+          }
+
+          // Extract parameters from signature
+          if (sig.parameters && sig.parameters.length > 0) {
+            typeInfo.parameters = [];
+
+            // Try to get parameter positions for type definitions
+            const parameterPositions = await this.findParameterPositions(
+              filePath,
+              match.position,
+              sig.parameters.length
+            );
+
+            for (let i = 0; i < sig.parameters.length; i++) {
+              const param = sig.parameters[i];
+              const paramLabel =
+                typeof param.label === 'string'
+                  ? param.label
+                  : sig.label.substring(param.label[0], param.label[1]);
+
+              // Parse parameter name and type
+              const paramMatch = paramLabel.match(/(\w+)(\?)?:\s*(.+?)(?:\s*=\s*(.+))?$/);
+              if (paramMatch) {
+                const [, name, optional, type, defaultValue] = paramMatch;
+                const paramInfo: ParameterInfo = {
+                  name: name || '',
+                  type: type?.trim() || paramLabel,
+                };
+                if (optional || defaultValue) {
+                  paramInfo.isOptional = true;
+                }
+                if (defaultValue) {
+                  paramInfo.defaultValue = defaultValue.trim();
+                }
+
+                // Try to get type definition for this parameter
+                if (parameterPositions[i]) {
+                  const typeDefinitions = await this.getTypeDefinition(
+                    filePath,
+                    parameterPositions[i]
+                  );
+                  if (typeDefinitions.length > 0) {
+                    const typeDef = typeDefinitions[0];
+                    paramInfo.definitionLocation = {
+                      uri: typeDef.uri,
+                      line: typeDef.range.start.line,
+                      character: typeDef.range.start.character,
+                    };
+                  }
+                }
+
+                typeInfo.parameters.push(paramInfo);
+              } else {
+                // Fallback for non-TypeScript style parameters
+                typeInfo.parameters.push({
+                  name: '',
+                  type: paramLabel.trim(),
+                });
+              }
+            }
+          } else {
+            typeInfo.parameters = [];
+          }
+
+          signatures.push({
+            name: match.name,
+            position: match.position,
+            signature: sig.label,
+            typeInfo: typeInfo,
+          });
+        }
+      } else {
+        // Fallback to hover info if signature help is not available
+        const hoverInfo = await this.getHoverInfo(filePath, match.position);
+        if (hoverInfo) {
+          const typeInfo = this.parseTypeInfo(hoverInfo, match.name);
+          signatures.push({
+            name: match.name,
+            position: match.position,
+            signature: hoverInfo,
+            typeInfo: typeInfo,
+          });
+        }
       }
     }
 
@@ -1466,14 +1759,14 @@ export class LSPClient {
         position: position,
       });
 
-      if (result && typeof result === 'object' && 'contents' in result) {
+      if (result && typeof result === 'object' && result !== null && 'contents' in result) {
         const contents = (result as { contents: unknown }).contents;
 
         // Handle different formats of hover contents
         if (typeof contents === 'string') {
           return contents;
         }
-        if (typeof contents === 'object' && 'value' in contents) {
+        if (typeof contents === 'object' && contents !== null && 'value' in contents) {
           return (contents as { value: string }).value;
         }
         if (Array.isArray(contents)) {
@@ -1488,6 +1781,358 @@ export class LSPClient {
     }
 
     return undefined;
+  }
+
+  private async getSignatureHelp(
+    filePath: string,
+    position: Position
+  ): Promise<
+    | {
+        signatures: Array<{
+          label: string;
+          documentation?: string;
+          parameters?: Array<{
+            label: string | [number, number];
+            documentation?: string;
+          }>;
+        }>;
+        activeSignature?: number;
+        activeParameter?: number;
+      }
+    | undefined
+  > {
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    try {
+      const result = await this.sendRequest(serverState.process, 'textDocument/signatureHelp', {
+        textDocument: { uri: pathToUri(filePath) },
+        position: position,
+      });
+
+      if (result && typeof result === 'object' && 'signatures' in result) {
+        return result as {
+          signatures: Array<{
+            label: string;
+            documentation?: string;
+            parameters?: Array<{
+              label: string | [number, number];
+              documentation?: string;
+            }>;
+          }>;
+          activeSignature?: number;
+          activeParameter?: number;
+        };
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG getSignatureHelp] Error getting signature help: ${error}\n`);
+    }
+
+    return undefined;
+  }
+
+  private async getCompletionItem(
+    filePath: string,
+    position: Position,
+    triggerCharacter?: string
+  ): Promise<
+    | Array<{
+        label: string;
+        kind?: number;
+        detail?: string;
+        documentation?: string;
+        insertText?: string;
+      }>
+    | undefined
+  > {
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    try {
+      const result = await this.sendRequest(serverState.process, 'textDocument/completion', {
+        textDocument: { uri: pathToUri(filePath) },
+        position: position,
+        context: {
+          triggerKind: triggerCharacter ? 2 : 1, // 2 = TriggerCharacter, 1 = Invoked
+          triggerCharacter: triggerCharacter,
+        },
+      });
+
+      if (Array.isArray(result)) {
+        return result as Array<{
+          label: string;
+          kind?: number;
+          detail?: string;
+          documentation?: string;
+          insertText?: string;
+        }>;
+      }
+      if (result && typeof result === 'object' && 'items' in result) {
+        return (
+          result as {
+            items: Array<{
+              label: string;
+              kind?: number;
+              detail?: string;
+              documentation?: string;
+              insertText?: string;
+            }>;
+          }
+        ).items;
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG getCompletionItem] Error getting completion: ${error}\n`);
+    }
+
+    return undefined;
+  }
+
+  private async getTypeDefinition(filePath: string, position: Position): Promise<Location[]> {
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    try {
+      const result = await this.sendRequest(serverState.process, 'textDocument/typeDefinition', {
+        textDocument: { uri: pathToUri(filePath) },
+        position: position,
+      });
+
+      if (Array.isArray(result)) {
+        return result.map((loc: LSPLocation) => ({
+          uri: loc.uri,
+          range: loc.range,
+        }));
+      }
+      if (result && typeof result === 'object' && 'uri' in result) {
+        const location = result as LSPLocation;
+        return [
+          {
+            uri: location.uri,
+            range: location.range,
+          },
+        ];
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG getTypeDefinition] Error getting type definition: ${error}\n`);
+    }
+
+    return [];
+  }
+
+  private parseTypeInfo(hoverText: string | undefined, symbolName: string): TypeInfo | undefined {
+    if (!hoverText) return undefined;
+
+    const typeInfo: TypeInfo = {};
+
+    // Extract method/function signature with parameters
+    // Look for patterns like "(params) : returnType" or "(params) => returnType"
+    // Skip "(method)" or "(property)" prefixes
+    const cleanedHover = hoverText.replace(/^\((?:method|property|function)\)\s*/, '');
+    const methodMatch = cleanedHover.match(/\(.*?\)\s*(?::|=>)\s*(.+?)(?:\n|$)/);
+    if (methodMatch?.[1]) {
+      typeInfo.returnType = methodMatch[1].trim();
+
+      // Parse parameters only if we found a method signature
+      const paramsMatch = cleanedHover.match(/\(([^)]*)\)/);
+      if (paramsMatch?.[1]) {
+        typeInfo.parameters = this.parseParameters(paramsMatch[1]);
+      } else {
+        typeInfo.parameters = [];
+      }
+    } else {
+      // Check for property/field patterns like "propertyName: Type"
+      const propertyMatch = cleanedHover.match(/^(\w+):\s*(.+?)(?:\n|$)/);
+      if (propertyMatch?.[2] && propertyMatch[1] === symbolName) {
+        typeInfo.returnType = propertyMatch[2].trim();
+      }
+    }
+
+    // Language-specific parsing
+    if (hoverText.includes('->') && !hoverText.includes('=>')) {
+      // Python style
+      const pythonMatch = hoverText.match(/def\s+\w+\([^)]*\)\s*->\s*(.+?)(?:\n|$)/);
+      if (pythonMatch?.[1]) {
+        typeInfo.returnType = pythonMatch[1].trim();
+      }
+    }
+
+    return Object.keys(typeInfo).length > 0 ? typeInfo : undefined;
+  }
+
+  private async findParameterPositions(
+    filePath: string,
+    methodPosition: Position,
+    paramCount: number
+  ): Promise<(Position | null)[]> {
+    try {
+      // Read the file content
+      const fileContent = await readFile(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+
+      // Start from the method position and look for the parameter list
+      const currentLine = methodPosition.line;
+      const currentChar = methodPosition.character;
+      let parenDepth = 0;
+      let inParams = false;
+      const paramPositions: (Position | null)[] = [];
+      let currentParamStart: Position | null = null;
+
+      // Simple state machine to find parameter positions
+      for (
+        let lineIdx = currentLine;
+        lineIdx < lines.length && paramPositions.length < paramCount;
+        lineIdx++
+      ) {
+        const line = lines[lineIdx];
+        const startChar = lineIdx === currentLine ? currentChar : 0;
+
+        for (let charIdx = startChar; charIdx < line.length; charIdx++) {
+          const char = line[charIdx];
+
+          if (char === '(') {
+            parenDepth++;
+            if (parenDepth === 1) {
+              inParams = true;
+            }
+          } else if (char === ')') {
+            parenDepth--;
+            if (parenDepth === 0) {
+              // End of parameters
+              return paramPositions.length < paramCount
+                ? [...paramPositions, ...new Array(paramCount - paramPositions.length).fill(null)]
+                : paramPositions;
+            }
+          } else if (inParams && parenDepth === 1) {
+            // Look for type annotations after ':'
+            if (char === ':' && currentParamStart === null) {
+              // Found a type annotation, the type starts after the colon
+              let typeStartIdx = charIdx + 1;
+              while (typeStartIdx < line.length && /\s/.test(line[typeStartIdx])) {
+                typeStartIdx++;
+              }
+              if (typeStartIdx < line.length) {
+                currentParamStart = { line: lineIdx, character: typeStartIdx };
+              }
+            } else if (char === ',' || char === ')') {
+              // End of current parameter
+              if (currentParamStart) {
+                paramPositions.push(currentParamStart);
+                currentParamStart = null;
+              }
+            }
+          }
+        }
+      }
+
+      // Fill remaining positions with null
+      while (paramPositions.length < paramCount) {
+        paramPositions.push(null);
+      }
+
+      return paramPositions;
+    } catch (error) {
+      // If we can't read the file or parse positions, return null positions
+      process.stderr.write(`[DEBUG findParameterPositions] Error: ${error}\n`);
+      return new Array(paramCount).fill(null);
+    }
+  }
+
+  private parseParameters(paramsString: string): ParameterInfo[] {
+    const parameters: ParameterInfo[] = [];
+
+    // Split by comma but respect nested generics/objects
+    const params = this.splitParameters(paramsString);
+
+    for (const param of params) {
+      const trimmed = param.trim();
+      if (!trimmed) continue;
+
+      // TypeScript/JavaScript style: "name: type = default" or "name?: type"
+      const tsMatch = trimmed.match(/^(\w+)(\?)?:\s*(.+?)(?:\s*=\s*(.+))?$/);
+      if (tsMatch) {
+        const [, name, optional, type, defaultValue] = tsMatch;
+        const paramInfo: ParameterInfo = {
+          name: name || '',
+          type: type?.trim() || '',
+        };
+        if (optional || defaultValue) {
+          paramInfo.isOptional = true;
+        }
+        if (defaultValue) {
+          paramInfo.defaultValue = defaultValue.trim();
+        }
+        parameters.push(paramInfo);
+        continue;
+      }
+
+      // Python style: "name: type = default"
+      const pythonMatch = trimmed.match(/^(\w+):\s*(.+?)(?:\s*=\s*(.+))?$/);
+      if (pythonMatch) {
+        const [, name, type, defaultValue] = pythonMatch;
+        const paramInfo: ParameterInfo = {
+          name: name || '',
+          type: type?.trim() || '',
+        };
+        if (defaultValue) {
+          paramInfo.defaultValue = defaultValue.trim();
+          paramInfo.isOptional = true;
+        }
+        parameters.push(paramInfo);
+        continue;
+      }
+
+      // Go style: "name type"
+      const goMatch = trimmed.match(/^(\w+)\s+(.+)$/);
+      if (goMatch) {
+        const [, name, type] = goMatch;
+        parameters.push({
+          name: name || '',
+          type: type?.trim() || '',
+        });
+        continue;
+      }
+
+      // Fallback: just type
+      if (trimmed && !trimmed.includes(' ')) {
+        parameters.push({
+          name: '',
+          type: trimmed,
+        });
+      }
+    }
+
+    return parameters;
+  }
+
+  private splitParameters(paramsString: string): string[] {
+    const params: string[] = [];
+    let current = '';
+    let depth = 0;
+
+    for (let i = 0; i < paramsString.length; i++) {
+      const char = paramsString[i];
+
+      if (char === '<' || char === '(' || char === '[' || char === '{') {
+        depth++;
+      } else if (char === '>' || char === ')' || char === ']' || char === '}') {
+        depth--;
+      } else if (char === ',' && depth === 0) {
+        params.push(current);
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current) {
+      params.push(current);
+    }
+
+    return params;
   }
 
   dispose(): void {
