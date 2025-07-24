@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
 import { SymbolKind } from './types.js';
-import type { DocumentSymbol, SymbolInformation, SymbolMatch } from './types.js';
+import type { DocumentSymbol, Position, SymbolInformation, SymbolMatch } from './types.js';
 
 const TEST_DIR = process.env.RUNNER_TEMP
   ? `${process.env.RUNNER_TEMP}/cclsp-class-test`
@@ -676,6 +676,305 @@ describe('Class Tools', () => {
       const signatures = await client.getMethodSignature(testFilePath, 'someMethod');
 
       expect(signatures).toHaveLength(0);
+    });
+  });
+
+  describe('findTypeInWorkspace', () => {
+    it('should find type definitions across workspace', async () => {
+      // Mock the servers map
+      const mockServerState = {
+        process: {
+          kill: jest.fn(),
+        } as any,
+        initializationPromise: Promise.resolve(),
+      };
+
+      // Use Object.defineProperty to mock the private servers property
+      Object.defineProperty(client, 'servers', {
+        value: new Map([['test', mockServerState]]),
+        writable: true,
+        configurable: true,
+      });
+
+      // Mock sendRequest to return workspace symbols
+      const sendRequestSpy = spyOn(client as any, 'sendRequest').mockResolvedValue([
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Enum,
+          location: {
+            uri: 'file:///src/types/BreakType.cs',
+            range: {
+              start: { line: 10, character: 0 },
+              end: { line: 15, character: 1 },
+            },
+          },
+          containerName: 'MyNamespace.Types',
+        },
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/models/BreakType.cs',
+            range: {
+              start: { line: 5, character: 0 },
+              end: { line: 50, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'SomeOtherType',
+          kind: SymbolKind.Interface,
+          location: {
+            uri: 'file:///src/interfaces/SomeOther.cs',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 10, character: 1 },
+            },
+          },
+        },
+      ]);
+
+      // Test finding all types with name BreakType
+      const allBreakTypes = await client.findTypeInWorkspace('BreakType');
+
+      // For exact matches, use the full name to ensure LSP servers find the symbol
+      expect(sendRequestSpy).toHaveBeenCalledWith(mockServerState.process, 'workspace/symbol', {
+        query: 'BreakType',
+      });
+      expect(allBreakTypes.symbols).toHaveLength(2);
+      expect(allBreakTypes.symbols[0]?.name).toBe('BreakType');
+      expect(allBreakTypes.symbols[0]?.kind).toBe(SymbolKind.Enum);
+      expect(allBreakTypes.symbols[1]?.name).toBe('BreakType');
+      expect(allBreakTypes.symbols[1]?.kind).toBe(SymbolKind.Class);
+    });
+
+    it('should filter by type kind when specified', async () => {
+      const mockServerState = {
+        process: {} as any,
+        initializationPromise: Promise.resolve(),
+      };
+
+      Object.defineProperty(client, 'servers', {
+        value: new Map([['test', mockServerState]]),
+        writable: true,
+        configurable: true,
+      });
+
+      spyOn(client as any, 'sendRequest').mockResolvedValue([
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Enum,
+          location: {
+            uri: 'file:///src/types/BreakType.cs',
+            range: {
+              start: { line: 10, character: 0 },
+              end: { line: 15, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/models/BreakType.cs',
+            range: {
+              start: { line: 5, character: 0 },
+              end: { line: 50, character: 1 },
+            },
+          },
+        },
+      ]);
+
+      // Test finding only enum BreakType
+      const enumBreakTypes = await client.findTypeInWorkspace('BreakType', 'enum');
+
+      expect(enumBreakTypes.symbols).toHaveLength(1);
+      expect(enumBreakTypes.symbols[0]?.name).toBe('BreakType');
+      expect(enumBreakTypes.symbols[0]?.kind).toBe(SymbolKind.Enum);
+    });
+
+    it('should return empty array when no servers available', async () => {
+      // Save original servers
+      const originalServers = (client as any).servers;
+
+      Object.defineProperty(client, 'servers', {
+        value: new Map(),
+        writable: true,
+        configurable: true,
+      });
+
+      const result = await client.findTypeInWorkspace('BreakType');
+
+      expect(result).toHaveLength(0);
+
+      // Restore original servers
+      Object.defineProperty(client, 'servers', {
+        value: originalServers,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should support wildcard patterns', async () => {
+      const mockServerState = {
+        process: {} as any,
+        initializationPromise: Promise.resolve(),
+      };
+
+      Object.defineProperty(client, 'servers', {
+        value: new Map([['test', mockServerState]]),
+        writable: true,
+        configurable: true,
+      });
+
+      // Mock sendRequest to return various type names
+      spyOn(client as any, 'sendRequest').mockResolvedValue([
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Enum,
+          location: {
+            uri: 'file:///src/types/BreakType.cs',
+            range: {
+              start: { line: 10, character: 0 },
+              end: { line: 15, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'DateTimeType',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/types/DateTimeType.cs',
+            range: {
+              start: { line: 5, character: 0 },
+              end: { line: 50, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'StringType',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/types/StringType.cs',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 20, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'TypeDefinition',
+          kind: SymbolKind.Interface,
+          location: {
+            uri: 'file:///src/interfaces/TypeDefinition.cs',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 10, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'MyBreak',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/models/MyBreak.cs',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 30, character: 1 },
+            },
+          },
+        },
+      ]);
+
+      // Test pattern *Type (ends with Type)
+      let results = await client.findTypeInWorkspace('*Type');
+      expect(results.symbols.map((r: SymbolInformation) => r.name).sort()).toEqual([
+        'BreakType',
+        'DateTimeType',
+        'StringType',
+      ]);
+
+      // Test pattern Break* (starts with Break)
+      results = await client.findTypeInWorkspace('Break*');
+      expect(results.symbols.map((r: SymbolInformation) => r.name)).toEqual(['BreakType']);
+
+      // Test pattern *Type* (contains Type)
+      results = await client.findTypeInWorkspace('*Type*');
+      expect(results.symbols.map((r: SymbolInformation) => r.name).sort()).toEqual([
+        'BreakType',
+        'DateTimeType',
+        'StringType',
+        'TypeDefinition',
+      ]);
+
+      // Test pattern ?reak* (single character wildcard)
+      results = await client.findTypeInWorkspace('?reak*');
+      expect(results.symbols.map((r: SymbolInformation) => r.name)).toEqual(['BreakType']);
+
+      // Test pattern *?reak (complex pattern)
+      results = await client.findTypeInWorkspace('*?reak');
+      expect(results.symbols.map((r: SymbolInformation) => r.name)).toEqual(['MyBreak']);
+    });
+
+    it('should handle wildcard patterns with type kind filter', async () => {
+      const mockServerState = {
+        process: {} as any,
+        initializationPromise: Promise.resolve(),
+      };
+
+      Object.defineProperty(client, 'servers', {
+        value: new Map([['test', mockServerState]]),
+        writable: true,
+        configurable: true,
+      });
+
+      spyOn(client as any, 'sendRequest').mockResolvedValue([
+        {
+          name: 'BreakType',
+          kind: SymbolKind.Enum,
+          location: {
+            uri: 'file:///src/types/BreakType.cs',
+            range: {
+              start: { line: 10, character: 0 },
+              end: { line: 15, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'DateTimeType',
+          kind: SymbolKind.Class,
+          location: {
+            uri: 'file:///src/types/DateTimeType.cs',
+            range: {
+              start: { line: 5, character: 0 },
+              end: { line: 50, character: 1 },
+            },
+          },
+        },
+        {
+          name: 'StringType',
+          kind: SymbolKind.Interface,
+          location: {
+            uri: 'file:///src/types/StringType.cs',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 20, character: 1 },
+            },
+          },
+        },
+      ]);
+
+      // Test wildcard pattern with class filter
+      const classResults = await client.findTypeInWorkspace('*Type', 'class');
+      expect(classResults.symbols).toHaveLength(1);
+      expect(classResults.symbols[0]?.name).toBe('DateTimeType');
+      expect(classResults.symbols[0]?.kind).toBe(SymbolKind.Class);
+
+      // Test wildcard pattern with enum filter
+      const enumResults = await client.findTypeInWorkspace('*Type', 'enum');
+      expect(enumResults.symbols).toHaveLength(1);
+      expect(enumResults.symbols[0]?.name).toBe('BreakType');
+      expect(enumResults.symbols[0]?.kind).toBe(SymbolKind.Enum);
     });
   });
 

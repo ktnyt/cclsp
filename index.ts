@@ -5,6 +5,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { LSPClient } from './src/lsp-client.js';
+import type { SymbolInformation, WorkspaceSearchResult } from './src/types.js';
 import { uriToPath } from './src/utils.js';
 
 // Handle subcommands
@@ -203,6 +204,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['file_path', 'method_name'],
+        },
+      },
+      {
+        name: 'search_type',
+        description:
+          'Search for symbols (types, methods, functions, variables, etc.) across the entire workspace by name. Supports wildcards and case-insensitive search by default.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            type_name: {
+              type: 'string',
+              description:
+                'The name or pattern of the symbol to search for. Supports wildcards: * (any sequence), ? (single char). Examples: BreakType, *method, getValue*, ?etData',
+            },
+            type_kind: {
+              type: 'string',
+              description: 'Optional: Filter by symbol kind',
+              enum: [
+                'class',
+                'interface',
+                'enum',
+                'struct',
+                'type_parameter',
+                'method',
+                'function',
+                'constructor',
+                'field',
+                'variable',
+                'property',
+                'constant',
+                'namespace',
+                'module',
+                'package',
+              ],
+            },
+            case_sensitive: {
+              type: 'boolean',
+              description: 'Optional: Whether to perform case-sensitive search (default: false)',
+              default: false,
+            },
+          },
+          required: ['type_name'],
         },
       },
     ],
@@ -753,6 +796,69 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Error getting method signature: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'search_type') {
+      const { type_name, type_kind, case_sensitive } = args as {
+        type_name: string;
+        type_kind?: string;
+        case_sensitive?: boolean;
+      };
+
+      try {
+        const searchResult = await lspClient.findTypeInWorkspace(
+          type_name,
+          type_kind,
+          case_sensitive
+        );
+
+        const { symbols: typeSymbols, debugInfo } = searchResult;
+
+        if (typeSymbols.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No symbol found for "${type_name}"${type_kind ? ` of kind "${type_kind}"` : ''}.\n\nMake sure:\n1. The symbol name is spelled correctly\n2. The language server is configured for the file type containing this symbol\n3. The workspace has been properly indexed by the language server${type_kind ? `\n4. The symbol is actually a ${type_kind}` : ''}`,
+              },
+            ],
+          };
+        }
+
+        const typeList = typeSymbols
+          .map((symbol: SymbolInformation) => {
+            const uri = symbol.location.uri;
+            const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+            const location = `${filePath}:${symbol.location.range.start.line + 1}:${symbol.location.range.start.character + 1}`;
+            const kindStr = lspClient.symbolKindToString(symbol.kind);
+
+            let output = `• ${symbol.name} (${kindStr}) at ${location}`;
+            if (symbol.containerName) {
+              output += `\n  Container: ${symbol.containerName}`;
+            }
+
+            return output;
+          })
+          .join('\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${typeSymbols.length} symbol${typeSymbols.length === 1 ? '' : 's'} matching "${type_name}":\n\n${typeList}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error searching for type: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
         };

@@ -127,6 +127,19 @@ export interface SymbolMatch {
   typeInfo?: TypeInfo;
 }
 
+export interface WorkspaceSearchResult {
+  symbols: SymbolInformation[];
+  debugInfo: {
+    rootUri: string;
+    serverCount: number;
+    totalSymbolsFound: number;
+    filteredSymbolsCount: number;
+    searchQuery: string;
+    caseSensitive: boolean;
+    isWildcardPattern: boolean;
+  };
+}
+
 export interface TypeInfo {
   parameters?: ParameterInfo[];
   returnType?: string;
