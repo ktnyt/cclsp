@@ -1682,11 +1682,9 @@ export class LSPClient {
       `[DEBUG getMethodSignature] Looking for method "${methodName}"${className ? ` in class "${className}"` : ''} in ${filePath}\n`
     );
 
-    // Find all symbols matching the method name
     const result = await this.findSymbolsByName(filePath, methodName, 'method');
     const { matches } = result;
 
-    // If className is specified, filter to only methods in that class
     let filteredMatches = matches;
     if (className) {
       const symbols = await this.getDocumentSymbols(filePath);
@@ -1696,7 +1694,6 @@ export class LSPClient {
         const classSymbol = this.findClassSymbol(symbols, className);
         if (classSymbol?.children) {
           for (const match of matches) {
-            // Check if this match is within the class
             for (const child of classSymbol.children) {
               if (
                 child.name === match.name &&
@@ -1710,7 +1707,6 @@ export class LSPClient {
           }
         }
       } else {
-        // For SymbolInformation, use containerName
         filteredMatches = matches.filter((match) => {
           const symbol = symbols.find(
             (s) =>
@@ -1723,85 +1719,39 @@ export class LSPClient {
       }
     }
 
-    // Get signature info for each match
     for (const match of filteredMatches) {
-      // Try to get signature help at the method position
       const signatureHelp = await this.getSignatureHelp(filePath, match.position);
 
       if (signatureHelp && signatureHelp.signatures.length > 0) {
-        // Use the first signature (usually the most relevant)
         const sig = signatureHelp.signatures[0];
         if (sig) {
-          const typeInfo: TypeInfo = {};
+          const typeInfo: TypeInfo = { parameters: [] };
 
-          // Parse return type from signature label
           const returnTypeMatch = sig.label.match(/\)\s*(?::|=>|->)\s*(.+)$/);
           if (returnTypeMatch?.[1]) {
             typeInfo.returnType = returnTypeMatch[1].trim();
           }
 
-          // Extract parameters from signature
           if (sig.parameters && sig.parameters.length > 0) {
-            typeInfo.parameters = [];
-
-            // Try to get parameter positions for type definitions
-            const parameterPositions = await this.findParameterPositions(
-              filePath,
-              match.position,
-              sig.parameters.length
-            );
-
-            for (let i = 0; i < sig.parameters.length; i++) {
-              const param = sig.parameters[i];
-              if (!param) continue;
-
+            for (const param of sig.parameters) {
               const paramLabel =
                 typeof param.label === 'string'
                   ? param.label
                   : sig.label.substring(param.label[0], param.label[1]);
-
-              // Parse parameter name and type
               const paramMatch = paramLabel.match(/(\w+)(\?)?:\s*(.+?)(?:\s*=\s*(.+))?$/);
+
               if (paramMatch) {
                 const [, name, optional, type, defaultValue] = paramMatch;
                 const paramInfo: ParameterInfo = {
                   name: name || '',
                   type: type?.trim() || paramLabel,
                 };
-                if (optional || defaultValue) {
-                  paramInfo.isOptional = true;
-                }
-                if (defaultValue) {
-                  paramInfo.defaultValue = defaultValue.trim();
-                }
+                if (optional || defaultValue) paramInfo.isOptional = true;
+                if (defaultValue) paramInfo.defaultValue = defaultValue.trim();
 
-                // Try to get type definition for this parameter
-                const paramPosition = parameterPositions[i];
-                if (paramPosition) {
-                  const typeDefinitions = await this.getTypeDefinition(filePath, paramPosition);
-                  if (typeDefinitions.length > 0) {
-                    const typeDef = typeDefinitions[0];
-                    if (typeDef) {
-                      paramInfo.definitionLocation = {
-                        uri: typeDef.uri,
-                        line: typeDef.range.start.line,
-                        character: typeDef.range.start.character,
-                      };
-                    }
-                  }
-                }
-
-                typeInfo.parameters.push(paramInfo);
-              } else {
-                // Fallback for non-TypeScript style parameters
-                typeInfo.parameters.push({
-                  name: '',
-                  type: paramLabel.trim(),
-                });
+                typeInfo.parameters?.push(paramInfo);
               }
             }
-          } else {
-            typeInfo.parameters = [];
           }
 
           signatures.push({
@@ -1812,7 +1762,6 @@ export class LSPClient {
           });
         }
       } else {
-        // Fallback to hover info if signature help is not available
         const hoverInfo = await this.getHoverInfo(filePath, match.position);
         if (hoverInfo) {
           const typeInfo = this.parseTypeInfo(hoverInfo, match.name);
@@ -1831,6 +1780,80 @@ export class LSPClient {
     );
 
     return signatures;
+  }
+
+  private async findParameterPositions(
+    filePath: string,
+    methodPosition: Position
+  ): Promise<Position[]> {
+    const positions: Position[] = [];
+    try {
+      const fileContent = readFileSync(filePath, 'utf-8');
+      const tree = this.parser.parse(fileContent);
+      const methodNode = tree.rootNode.descendantForPosition({
+        row: methodPosition.line,
+        column: methodPosition.character,
+      });
+
+      if (methodNode?.parent && methodNode.parent.type === 'function_declaration') {
+        const params = methodNode.parent.namedChildren.find((c) => c.type === 'formal_parameters');
+        if (params) {
+          for (const param of params.namedChildren) {
+            if (param.type === 'required_parameter' || param.type === 'optional_parameter') {
+              const typeNode = param.namedChildren.find((c) => c.type === 'type_annotation');
+              if (typeNode?.lastNamedChild) {
+                positions.push({
+                  line: typeNode.lastNamedChild.startPosition.row,
+                  character: typeNode.lastNamedChild.startPosition.column,
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG findParameterPositions] Error using tree-sitter: ${error}\n`);
+    }
+    return positions;
+  }
+
+  private async findReturnTypePosition(
+    filePath: string,
+    methodPosition: Position
+  ): Promise<Position | null> {
+    try {
+      const fileContent = readFileSync(filePath, 'utf-8');
+      const tree = this.parser.parse(fileContent);
+      const methodNode = tree.rootNode.descendantForPosition({
+        row: methodPosition.line,
+        column: methodPosition.character,
+      });
+
+      if (methodNode?.parent && methodNode.parent.type === 'function_declaration') {
+        const returnTypeNode = methodNode.parent.namedChildren.find(
+          (c) => c.type === 'type_annotation'
+        );
+        if (returnTypeNode?.lastNamedChild) {
+          return {
+            line: returnTypeNode.lastNamedChild.startPosition.row,
+            character: returnTypeNode.lastNamedChild.startPosition.column,
+          };
+        }
+      }
+    } catch (error) {
+      process.stderr.write(`[DEBUG findReturnTypePosition] Error using tree-sitter: ${error}\n`);
+    }
+    return null;
+  }
+
+  private async readUriContent(uri: string): Promise<string> {
+    const filePath = uri.startsWith('file://') ? uri.substring(7) : uri;
+    try {
+      return readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      process.stderr.write(`[DEBUG readUriContent] Error reading file: ${error}\n`);
+      return '';
+    }
   }
 
   private async getHoverInfo(filePath: string, position: Position): Promise<string | undefined> {
@@ -2224,7 +2247,7 @@ export class LSPClient {
     try {
       // Use the same gitignore-aware scanning as scanDirectoryForExtensions
       const ig = await loadGitignore(rootDir);
-      
+
       const findFileRecursively = async (
         dir: string,
         depth: number,

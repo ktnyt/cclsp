@@ -50,6 +50,8 @@
     "@types/inquirer": "^9.0.8",
     "ignore": "^7.0.5",
     "inquirer": "^12.6.3",
+    "tree-sitter": "^0.21.3",
+    "tree-sitter-typescript": "^0.20.4",
     "typescript-language-server": "^4.3.4"
   },
   "devDependencies": {

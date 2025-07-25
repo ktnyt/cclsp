@@ -686,7 +686,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   }
                   if (param.definitionLocation) {
                     const defLoc = param.definitionLocation;
-                    output += `\n      Type defined at: ${defLoc.uri}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                    const filePath = uriToPath(defLoc.uri);
+                    output += `\n      Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
                   }
                 }
               }
@@ -695,7 +696,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               }
               if (member.typeInfo.definitionLocation) {
                 const defLoc = member.typeInfo.definitionLocation;
-                output += `\n  Type defined at: ${defLoc.uri}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                const filePath = uriToPath(defLoc.uri);
+                output += `\n  Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
               }
             }
 
@@ -765,16 +767,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   }
                   if (param.definitionLocation) {
                     const defLoc = param.definitionLocation;
-                    output += `\n      Type defined at: ${defLoc.uri}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                    const filePath = uriToPath(defLoc.uri);
+                    output += `\n      Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
                   }
                 }
               }
               if (sig.typeInfo.returnType) {
                 output += `\n  Returns: ${sig.typeInfo.returnType}`;
+                if (sig.typeInfo.returnTypeDefinitionLocation) {
+                  const defLoc = sig.typeInfo.returnTypeDefinitionLocation;
+                  process.stderr.write(`[DEBUG] Raw return type URI from LSP: ${defLoc.uri}\n`);
+                  const filePath = uriToPath(defLoc.uri);
+                  process.stderr.write(`[DEBUG] Converted return type path: ${filePath}\n`);
+                  output += `\n    Return type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                }
               }
               if (sig.typeInfo.definitionLocation) {
                 const defLoc = sig.typeInfo.definitionLocation;
-                output += `\n  Type defined at: ${defLoc.uri}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                const filePath = uriToPath(defLoc.uri);
+                output += `\n  Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
               }
             }
 
@@ -832,7 +843,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const typeList = typeSymbols
           .map((symbol: SymbolInformation) => {
             const uri = symbol.location.uri;
-            const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+            const filePath = uriToPath(uri);
             const location = `${filePath}:${symbol.location.range.start.line + 1}:${symbol.location.range.start.character + 1}`;
             const kindStr = lspClient.symbolKindToString(symbol.kind);
 

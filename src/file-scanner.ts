@@ -28,10 +28,10 @@ const DEFAULT_IGNORE_PATTERNS = [
   '*.log',
   '.DS_Store',
   'Thumbs.db',
-    "preview",
-    ".angular",
-    ".claude",
-    ".gemini",
+  'preview',
+  '.angular',
+  '.claude',
+  '.gemini',
 ];
 
 export interface FileScanResult {

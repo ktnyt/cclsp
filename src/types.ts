@@ -143,11 +143,17 @@ export interface WorkspaceSearchResult {
 export interface TypeInfo {
   parameters?: ParameterInfo[];
   returnType?: string;
+  returnTypeDefinitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
   definitionLocation?: {
     uri: string;
     line: number;
     character: number;
   };
+  definition?: string;
 }
 
 export interface ParameterInfo {
@@ -160,6 +166,7 @@ export interface ParameterInfo {
     line: number;
     character: number;
   };
+  definition?: string;
 }
 
 export enum DiagnosticSeverity {
