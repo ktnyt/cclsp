@@ -5,6 +5,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { LSPClient } from './src/lsp-client.js';
+import type { SymbolInformation, WorkspaceSearchResult } from './src/types.js';
 import { uriToPath } from './src/utils.js';
 
 // Handle subcommands
@@ -161,6 +162,90 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['file_path'],
+        },
+      },
+      {
+        name: 'get_class_members',
+        description:
+          'List all properties and methods of a class. Returns members with their types and signatures.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file containing the class',
+            },
+            class_name: {
+              type: 'string',
+              description: 'The name of the class',
+            },
+          },
+          required: ['file_path', 'class_name'],
+        },
+      },
+      {
+        name: 'get_method_signature',
+        description:
+          'Show full method definition with parameters and return type using LSP hover information.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file containing the method',
+            },
+            method_name: {
+              type: 'string',
+              description: 'The name of the method',
+            },
+            class_name: {
+              type: 'string',
+              description: 'Optional: The name of the class containing the method',
+            },
+          },
+          required: ['file_path', 'method_name'],
+        },
+      },
+      {
+        name: 'search_type',
+        description:
+          'Search for symbols (types, methods, functions, variables, etc.) across the entire workspace by name. Supports wildcards and case-insensitive search by default.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            type_name: {
+              type: 'string',
+              description:
+                'The name or pattern of the symbol to search for. Supports wildcards: * (any sequence), ? (single char). Examples: BreakType, *method, getValue*, ?etData',
+            },
+            type_kind: {
+              type: 'string',
+              description: 'Optional: Filter by symbol kind',
+              enum: [
+                'class',
+                'interface',
+                'enum',
+                'struct',
+                'type_parameter',
+                'method',
+                'function',
+                'constructor',
+                'field',
+                'variable',
+                'property',
+                'constant',
+                'namespace',
+                'module',
+                'package',
+              ],
+            },
+            case_sensitive: {
+              type: 'boolean',
+              description: 'Optional: Whether to perform case-sensitive search (default: false)',
+              default: false,
+            },
+          },
+          required: ['type_name'],
         },
       },
     ],
@@ -557,6 +642,234 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Error getting diagnostics: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'get_class_members') {
+      const { file_path, class_name } = args as { file_path: string; class_name: string };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const members = await lspClient.getClassMembers(absolutePath, class_name);
+
+        if (members.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No members found for class "${class_name}" in ${file_path}. Please verify the class name and ensure the language server is properly configured.`,
+              },
+            ],
+          };
+        }
+
+        const memberList = members
+          .map((member) => {
+            const kindStr = lspClient.symbolKindToString(member.kind);
+            const location = `${file_path}:${member.position.line + 1}:${member.position.character + 1}`;
+            let output = `• ${member.name} (${kindStr}) at ${location}`;
+
+            if (member.detail) {
+              output += `\n  ${member.detail}`;
+            }
+
+            if (member.typeInfo) {
+              if (member.typeInfo.parameters && member.typeInfo.parameters.length > 0) {
+                output += '\n  Parameters:';
+                for (const param of member.typeInfo.parameters) {
+                  output += `\n    - ${param.name}${param.isOptional ? '?' : ''}: ${param.type}`;
+                  if (param.defaultValue) {
+                    output += ` = ${param.defaultValue}`;
+                  }
+                  if (param.definitionLocation) {
+                    const defLoc = param.definitionLocation;
+                    const filePath = uriToPath(defLoc.uri);
+                    output += `\n      Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                  }
+                }
+              }
+              if (member.typeInfo.returnType) {
+                output += `\n  Returns: ${member.typeInfo.returnType}`;
+              }
+              if (member.typeInfo.definitionLocation) {
+                const defLoc = member.typeInfo.definitionLocation;
+                const filePath = uriToPath(defLoc.uri);
+                output += `\n  Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+              }
+            }
+
+            return output;
+          })
+          .join('\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${members.length} member${members.length === 1 ? '' : 's'} in class "${class_name}":\n\n${memberList}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error getting class members: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'get_method_signature') {
+      const { file_path, method_name, class_name } = args as {
+        file_path: string;
+        method_name: string;
+        class_name?: string;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const signatures = await lspClient.getMethodSignature(
+          absolutePath,
+          method_name,
+          class_name
+        );
+
+        if (signatures.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No signature found for method "${method_name}"${class_name ? ` in class "${class_name}"` : ''} in ${file_path}. Please verify the method name and ensure the language server is properly configured.`,
+              },
+            ],
+          };
+        }
+
+        const signatureList = signatures
+          .map((sig) => {
+            const location = `${file_path}:${sig.position.line + 1}:${sig.position.character + 1}`;
+            let output = `Method: ${sig.name} at ${location}\n${sig.signature}`;
+
+            if (sig.typeInfo) {
+              output += '\n\nType Details:';
+              if (sig.typeInfo.parameters && sig.typeInfo.parameters.length > 0) {
+                output += '\n  Parameters:';
+                for (const param of sig.typeInfo.parameters) {
+                  output += `\n    - ${param.name}${param.isOptional ? '?' : ''}: ${param.type}`;
+                  if (param.defaultValue) {
+                    output += ` = ${param.defaultValue}`;
+                  }
+                  if (param.definitionLocation) {
+                    const defLoc = param.definitionLocation;
+                    const filePath = uriToPath(defLoc.uri);
+                    output += `\n      Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                  }
+                }
+              }
+              if (sig.typeInfo.returnType) {
+                output += `\n  Returns: ${sig.typeInfo.returnType}`;
+                if (sig.typeInfo.returnTypeDefinitionLocation) {
+                  const defLoc = sig.typeInfo.returnTypeDefinitionLocation;
+                  process.stderr.write(`[DEBUG] Raw return type URI from LSP: ${defLoc.uri}\n`);
+                  const filePath = uriToPath(defLoc.uri);
+                  process.stderr.write(`[DEBUG] Converted return type path: ${filePath}\n`);
+                  output += `\n    Return type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+                }
+              }
+              if (sig.typeInfo.definitionLocation) {
+                const defLoc = sig.typeInfo.definitionLocation;
+                const filePath = uriToPath(defLoc.uri);
+                output += `\n  Type defined at: ${filePath}:${defLoc.line + 1}:${defLoc.character + 1}`;
+              }
+            }
+
+            return output;
+          })
+          .join('\n\n---\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: signatureList,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error getting method signature: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'search_type') {
+      const { type_name, type_kind, case_sensitive } = args as {
+        type_name: string;
+        type_kind?: string;
+        case_sensitive?: boolean;
+      };
+
+      try {
+        const searchResult = await lspClient.findTypeInWorkspace(
+          type_name,
+          type_kind,
+          case_sensitive
+        );
+
+        const { symbols: typeSymbols, debugInfo } = searchResult;
+
+        if (typeSymbols.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No symbol found for "${type_name}"${type_kind ? ` of kind "${type_kind}"` : ''}.\n\nMake sure:\n1. The symbol name is spelled correctly\n2. The language server is configured for the file type containing this symbol\n3. The workspace has been properly indexed by the language server${type_kind ? `\n4. The symbol is actually a ${type_kind}` : ''}`,
+              },
+            ],
+          };
+        }
+
+        const typeList = typeSymbols
+          .map((symbol: SymbolInformation) => {
+            const uri = symbol.location.uri;
+            const filePath = uriToPath(uri);
+            const location = `${filePath}:${symbol.location.range.start.line + 1}:${symbol.location.range.start.character + 1}`;
+            const kindStr = lspClient.symbolKindToString(symbol.kind);
+
+            let output = `• ${symbol.name} (${kindStr}) at ${location}`;
+            if (symbol.containerName) {
+              output += `\n  Container: ${symbol.containerName}`;
+            }
+
+            return output;
+          })
+          .join('\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${typeSymbols.length} symbol${typeSymbols.length === 1 ? '' : 's'} matching "${type_name}":\n\n${typeList}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error searching for type: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
         };

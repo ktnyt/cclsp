@@ -124,6 +124,49 @@ export interface SymbolMatch {
     end: Position;
   };
   detail?: string;
+  typeInfo?: TypeInfo;
+}
+
+export interface WorkspaceSearchResult {
+  symbols: SymbolInformation[];
+  debugInfo: {
+    rootUri: string;
+    serverCount: number;
+    totalSymbolsFound: number;
+    filteredSymbolsCount: number;
+    searchQuery: string;
+    caseSensitive: boolean;
+    isWildcardPattern: boolean;
+  };
+}
+
+export interface TypeInfo {
+  parameters?: ParameterInfo[];
+  returnType?: string;
+  returnTypeDefinitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
+  definitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
+  definition?: string;
+}
+
+export interface ParameterInfo {
+  name: string;
+  type: string;
+  isOptional?: boolean;
+  defaultValue?: string;
+  definitionLocation?: {
+    uri: string;
+    line: number;
+    character: number;
+  };
+  definition?: string;
 }
 
 export enum DiagnosticSeverity {
