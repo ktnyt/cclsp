@@ -450,6 +450,31 @@ Results: Found 3 diagnostics:
 - Hint: Consider using const instead of let (Line 30, Column 1)
 ```
 
+### Restarting LSP Servers
+
+When LSP servers become unresponsive or configuration changes:
+
+```
+Claude: The TypeScript server seems unresponsive, let me restart it
+> Using cclsp.restart_server with extensions ["ts", "tsx"]
+
+Result: Successfully restarted 1 LSP server(s)
+Restarted servers:
+• typescript-language-server --stdio (ts, tsx)
+```
+
+Or restart all servers:
+
+```
+Claude: I'll restart all LSP servers to ensure they're working properly
+> Using cclsp.restart_server
+
+Result: Successfully restarted 2 LSP server(s)
+Restarted servers:
+• typescript-language-server --stdio (ts, tsx)
+• pylsp (py)
+```
+
 ## 🔍 Troubleshooting
 
 ### Known Issues
@@ -481,6 +506,10 @@ Add `restartInterval` to your Python server configuration:
 ```
 
 This will automatically restart the Python LSP server every 5 minutes, maintaining optimal performance for long coding sessions.
+
+**Alternative**: You can also manually restart servers using the `restart_server` tool when needed:
+- Restart specific server: `restart_server` with `extensions: ["py"]`
+- Restart all servers: `restart_server` without parameters
 
 **Note**: The setup wizard automatically configures this for Python servers when detected.
 
