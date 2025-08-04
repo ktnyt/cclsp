@@ -155,6 +155,8 @@ The implementation handles LSP protocol specifics:
 - Server initialization handshake
 - Proper process cleanup on shutdown
 - Preloading of servers for detected file types
+- Automatic server restart based on configured intervals
+- Manual server restart via MCP tool
 
 ## Multi-Position Symbol Resolution
 

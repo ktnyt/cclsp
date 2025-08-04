@@ -432,6 +432,80 @@ export class LSPClient {
     }
   }
 
+  /**
+   * Manually restart LSP servers for specific extensions or all servers
+   * @param extensions Array of file extensions, or null to restart all
+   * @returns Object with success status and details about restarted servers
+   */
+  async restartServers(
+    extensions?: string[]
+  ): Promise<{ success: boolean; restarted: string[]; failed: string[]; message: string }> {
+    const restarted: string[] = [];
+    const failed: string[] = [];
+
+    process.stderr.write(
+      `[DEBUG restartServers] Request to restart servers for extensions: ${extensions ? extensions.join(', ') : 'all'}\n`
+    );
+
+    // Collect servers to restart
+    const serversToRestart: Array<{ key: string; state: ServerState }> = [];
+
+    for (const [key, serverState] of this.servers.entries()) {
+      if (!extensions || extensions.some((ext) => serverState.config.extensions.includes(ext))) {
+        serversToRestart.push({ key, state: serverState });
+      }
+    }
+
+    if (serversToRestart.length === 0) {
+      const message = extensions
+        ? `No LSP servers found for extensions: ${extensions.join(', ')}`
+        : 'No LSP servers are currently running';
+      return { success: false, restarted: [], failed: [], message };
+    }
+
+    // Restart each server
+    for (const { key, state } of serversToRestart) {
+      const serverDesc = `${state.config.command.join(' ')} (${state.config.extensions.join(', ')})`;
+
+      try {
+        // Clear existing timer
+        if (state.restartTimer) {
+          clearTimeout(state.restartTimer);
+          state.restartTimer = undefined;
+        }
+
+        // Terminate old server
+        state.process.kill();
+
+        // Remove from servers map
+        this.servers.delete(key);
+
+        // Start new server
+        const newServerState = await this.startServer(state.config);
+        this.servers.set(key, newServerState);
+
+        restarted.push(serverDesc);
+        process.stderr.write(`[DEBUG restartServers] Successfully restarted: ${serverDesc}\n`);
+      } catch (error) {
+        failed.push(`${serverDesc}: ${error}`);
+        process.stderr.write(`[DEBUG restartServers] Failed to restart: ${serverDesc}: ${error}\n`);
+      }
+    }
+
+    const success = failed.length === 0;
+    let message: string;
+
+    if (success) {
+      message = `Successfully restarted ${restarted.length} LSP server(s)`;
+    } else if (restarted.length > 0) {
+      message = `Restarted ${restarted.length} server(s), but ${failed.length} failed`;
+    } else {
+      message = `Failed to restart all ${failed.length} server(s)`;
+    }
+
+    return { success, restarted, failed, message };
+  }
+
   private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<void> {
     if (serverState.openFiles.has(filePath)) {
       process.stderr.write(`[DEBUG ensureFileOpen] File already open: ${filePath}\n`);

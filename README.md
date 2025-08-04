@@ -389,6 +389,13 @@ Get language diagnostics (errors, warnings, hints) for a file. Supports both pul
 **Parameters:**
 - `file_path`: The path to the file
 
+### `restart_server`
+
+Manually restart LSP servers. Useful when servers become unresponsive or need to reload configuration. Can restart servers for specific file extensions or all running servers.
+
+**Parameters:**
+- `extensions`: Array of file extensions to restart servers for (e.g., ["ts", "tsx"]). If not provided, all servers will be restarted (optional)
+
 ## 💡 Real-world Examples
 
 ### Finding Function Definitions

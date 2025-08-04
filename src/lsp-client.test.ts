@@ -533,6 +533,215 @@ describe('LSPClient', () => {
     });
   });
 
+  describe('restartServers', () => {
+    it('should handle restart request for non-existent extensions', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+      const result = await client.restartServers(['xyz']);
+
+      expect(result.success).toBe(false);
+      expect(result.restarted).toHaveLength(0);
+      expect(result.failed).toHaveLength(0);
+      expect(result.message).toContain('No LSP servers found for extensions');
+    });
+
+    it('should handle restart request when no servers are running', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+      const result = await client.restartServers();
+
+      expect(result.success).toBe(false);
+      expect(result.restarted).toHaveLength(0);
+      expect(result.failed).toHaveLength(0);
+      expect(result.message).toBe('No LSP servers are currently running');
+    });
+
+    it('should restart servers for specific extensions', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock servers map with running servers
+      const mockServerState = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['ts', 'tsx'],
+          command: ['typescript-language-server', '--stdio'],
+        },
+        restartTimer: undefined,
+      };
+
+      const serversMap = new Map();
+      serversMap.set(JSON.stringify(mockServerState.config), mockServerState);
+      (client as any).servers = serversMap;
+
+      // Mock startServer to simulate successful restart
+      const startServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'startServer'
+      ).mockResolvedValue({
+        process: { kill: jest.fn() },
+        initialized: true,
+        initializationPromise: Promise.resolve(),
+        openFiles: new Set(),
+        startTime: Date.now(),
+        config: mockServerState.config,
+      });
+
+      const result = await client.restartServers(['ts']);
+
+      expect(result.success).toBe(true);
+      expect(result.restarted).toHaveLength(1);
+      expect(result.restarted[0]).toContain('typescript-language-server');
+      expect(result.failed).toHaveLength(0);
+      expect(mockServerState.process.kill).toHaveBeenCalled();
+      expect(startServerSpy).toHaveBeenCalledWith(mockServerState.config);
+
+      startServerSpy.mockRestore();
+    });
+
+    it('should restart all servers when no extensions specified', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      // Mock multiple servers
+      const mockServer1 = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['ts', 'tsx'],
+          command: ['typescript-language-server', '--stdio'],
+        },
+        restartTimer: undefined,
+      };
+
+      const mockServer2 = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['py'],
+          command: ['pylsp'],
+        },
+        restartTimer: undefined,
+      };
+
+      const serversMap = new Map();
+      serversMap.set(JSON.stringify(mockServer1.config), mockServer1);
+      serversMap.set(JSON.stringify(mockServer2.config), mockServer2);
+      (client as any).servers = serversMap;
+
+      // Mock startServer
+      const startServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'startServer'
+      ).mockResolvedValue({
+        process: { kill: jest.fn() },
+        initialized: true,
+        initializationPromise: Promise.resolve(),
+        openFiles: new Set(),
+        startTime: Date.now(),
+        config: mockServer1.config,
+      });
+
+      const result = await client.restartServers();
+
+      expect(result.success).toBe(true);
+      expect(result.restarted).toHaveLength(2);
+      expect(result.failed).toHaveLength(0);
+      expect(mockServer1.process.kill).toHaveBeenCalled();
+      expect(mockServer2.process.kill).toHaveBeenCalled();
+      expect(startServerSpy).toHaveBeenCalledTimes(2);
+
+      startServerSpy.mockRestore();
+    });
+
+    it('should handle partial restart failures', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockServer1 = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['ts'],
+          command: ['typescript-language-server', '--stdio'],
+        },
+        restartTimer: undefined,
+      };
+
+      const mockServer2 = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['py'],
+          command: ['pylsp'],
+        },
+        restartTimer: undefined,
+      };
+
+      const serversMap = new Map();
+      serversMap.set(JSON.stringify(mockServer1.config), mockServer1);
+      serversMap.set(JSON.stringify(mockServer2.config), mockServer2);
+      (client as any).servers = serversMap;
+
+      let callCount = 0;
+      const startServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'startServer'
+      ).mockImplementation(async (config) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            process: { kill: jest.fn() },
+            initialized: true,
+            initializationPromise: Promise.resolve(),
+            openFiles: new Set(),
+            startTime: Date.now(),
+            config,
+          };
+        }
+        throw new Error('Failed to start server');
+      });
+
+      const result = await client.restartServers();
+
+      expect(result.success).toBe(false);
+      expect(result.restarted).toHaveLength(1);
+      expect(result.failed).toHaveLength(1);
+      expect(result.message).toContain('Restarted 1 server(s), but 1 failed');
+
+      startServerSpy.mockRestore();
+    });
+
+    it('should clear restart timer before restarting', async () => {
+      const client = new LSPClient(TEST_CONFIG_PATH);
+
+      const mockTimer = setTimeout(() => {}, 1000);
+      const mockServerState = {
+        process: { kill: jest.fn() },
+        config: {
+          extensions: ['ts'],
+          command: ['typescript-language-server', '--stdio'],
+        },
+        restartTimer: mockTimer,
+      };
+
+      const serversMap = new Map();
+      serversMap.set(JSON.stringify(mockServerState.config), mockServerState);
+      (client as any).servers = serversMap;
+
+      const clearTimeoutSpy = spyOn(global, 'clearTimeout');
+      const startServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'startServer'
+      ).mockResolvedValue({
+        process: { kill: jest.fn() },
+        initialized: true,
+        initializationPromise: Promise.resolve(),
+        openFiles: new Set(),
+        startTime: Date.now(),
+        config: mockServerState.config,
+      });
+
+      await client.restartServers(['ts']);
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(mockTimer);
+
+      clearTimeoutSpy.mockRestore();
+      startServerSpy.mockRestore();
+    });
+  });
+
   describe('getDiagnostics', () => {
     it('should return diagnostics when server supports textDocument/diagnostic', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);

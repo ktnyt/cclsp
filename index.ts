@@ -163,6 +163,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['file_path'],
         },
       },
+      {
+        name: 'restart_server',
+        description:
+          'Manually restart LSP servers. Can restart servers for specific file extensions or all running servers.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            extensions: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Array of file extensions to restart servers for (e.g., ["ts", "tsx"]). If not provided, all servers will be restarted.',
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -557,6 +573,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Error getting diagnostics: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'restart_server') {
+      const { extensions } = args as { extensions?: string[] };
+
+      try {
+        const result = await lspClient.restartServers(extensions);
+
+        let response = result.message;
+
+        if (result.restarted.length > 0) {
+          response += `\n\nRestarted servers:\n${result.restarted.map((s) => `• ${s}`).join('\n')}`;
+        }
+
+        if (result.failed.length > 0) {
+          response += `\n\nFailed to restart:\n${result.failed.map((s) => `• ${s}`).join('\n')}`;
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: response,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error restarting servers: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
         };
