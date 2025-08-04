@@ -158,14 +158,4 @@ The implementation handles LSP protocol specifics:
 - Automatic server restart based on configured intervals
 - Manual server restart via MCP tool
 
-## Multi-Position Symbol Resolution
-
-The MCP tools now automatically try multiple position combinations to handle different indexing conventions:
-
-- `line-1/character-1`: Both line and character adjusted by -1
-- `line/character-1`: Only character adjusted by -1  
-- `line-1/character`: Only line adjusted by -1
-- `line/character`: Original position as provided
-
-When multiple positions yield results, all successful matches are returned with clear labels indicating which position combination worked. This eliminates the need for users to manually specify indexing preferences and provides better symbol resolution accuracy.
 

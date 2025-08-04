@@ -34,7 +34,9 @@ https://github.com/user-attachments/assets/52980f32-64d6-4b78-9cbf-18d6ae120cdd
   - [`find_definition`](#find_definition)
   - [`find_references`](#find_references)
   - [`rename_symbol`](#rename_symbol)
+  - [`rename_symbol_strict`](#rename_symbol_strict)
   - [`get_diagnostics`](#get_diagnostics)
+  - [`restart_server`](#restart_server)
 - [💡 Real-world Examples](#-real-world-examples)
   - [Finding Function Definitions](#finding-function-definitions)
   - [Finding All References](#finding-all-references)
@@ -351,49 +353,57 @@ The server exposes these MCP tools:
 
 ### `find_definition`
 
-Find the definition of a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
+Find the definition of a symbol by name and kind in a file. Returns definitions for all matching symbols.
 
 **Parameters:**
 
-- `file_path`: Absolute path to the file
-- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
-- `character`: Character position (0-based)
-- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
+- `file_path`: The path to the file
+- `symbol_name`: The name of the symbol
+- `symbol_kind`: The kind of symbol (function, class, variable, method, etc.) (optional)
 
 ### `find_references`
 
-Find all references to a symbol at a specific position. Returns line/character numbers as 1-based for human readability.
+Find all references to a symbol by name and kind in a file. Returns references for all matching symbols.
 
 **Parameters:**
 
-- `file_path`: Absolute path to the file
-- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
-- `character`: Character position (0-based)
+- `file_path`: The path to the file
+- `symbol_name`: The name of the symbol
+- `symbol_kind`: The kind of symbol (function, class, variable, method, etc.) (optional)
 - `include_declaration`: Whether to include the declaration (optional, default: true)
-- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
 
 ### `rename_symbol`
 
-Rename a symbol at a specific position in a file. Returns the file changes needed to rename the symbol across the codebase.
+Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict.
 
 **Parameters:**
 
-- `file_path`: Absolute path to the file
-- `line`: Line number (1-indexed by default; set `use_zero_index` to use 0-based indexing)
-- `character`: Character position (0-based)
+- `file_path`: The path to the file
+- `symbol_name`: The name of the symbol
+- `symbol_kind`: The kind of symbol (function, class, variable, method, etc.) (optional)
 - `new_name`: The new name for the symbol
-- `use_zero_index`: If true, use line number as-is (0-indexed); otherwise subtract 1 for 1-indexed input (optional, default: false)
+
+### `rename_symbol_strict`
+
+Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates.
+
+**Parameters:**
+
+- `file_path`: The path to the file
+- `line`: The line number (1-indexed)
+- `character`: The character position in the line (1-indexed)
+- `new_name`: The new name for the symbol
 
 ### `get_diagnostics`
 
-Get language diagnostics (errors, warnings, hints) for a file. Supports both pull-based (textDocument/diagnostic) and push-based (textDocument/publishDiagnostics) diagnostic reporting for maximum compatibility with different LSP servers.
+Get language diagnostics (errors, warnings, hints) for a file. Uses LSP textDocument/diagnostic to pull current diagnostics.
 
 **Parameters:**
-- `file_path`: The path to the file
+- `file_path`: The path to the file to get diagnostics for
 
 ### `restart_server`
 
-Manually restart LSP servers. Useful when servers become unresponsive or need to reload configuration. Can restart servers for specific file extensions or all running servers.
+Manually restart LSP servers. Can restart servers for specific file extensions or all running servers.
 
 **Parameters:**
 - `extensions`: Array of file extensions to restart servers for (e.g., ["ts", "tsx"]). If not provided, all servers will be restarted (optional)
@@ -406,9 +416,9 @@ When Claude needs to understand how a function works:
 
 ```
 Claude: Let me find the definition of the `processRequest` function
-> Using cclsp.find_definition at line 42, character 15
+> Using cclsp.find_definition with symbol_name="processRequest", symbol_kind="function"
 
-Result: Found definition at src/handlers/request.ts:127
+Result: Found definition at src/handlers/request.ts:127:1
 ```
 
 ### Finding All References
@@ -417,14 +427,14 @@ When refactoring or understanding code impact:
 
 ```
 Claude: I'll find all places where `CONFIG_PATH` is used
-> Using cclsp.find_references at line 10, character 20
+> Using cclsp.find_references with symbol_name="CONFIG_PATH"
 
 Results: Found 5 references:
-- src/config.ts:10 (declaration)
-- src/index.ts:45
-- src/utils/loader.ts:23
-- tests/config.test.ts:15
-- tests/config.test.ts:89
+- src/config.ts:10:1 (declaration)
+- src/index.ts:45:15
+- src/utils/loader.ts:23:8
+- tests/config.test.ts:15:10
+- tests/config.test.ts:89:12
 ```
 
 ### Renaming Symbols
@@ -433,9 +443,30 @@ Safe refactoring across the entire codebase:
 
 ```
 Claude: I'll rename `getUserData` to `fetchUserProfile`
-> Using cclsp.rename_symbol at line 55, character 10
+> Using cclsp.rename_symbol with symbol_name="getUserData", new_name="fetchUserProfile"
 
-Result: 12 files will be updated with the new name
+Result: Successfully renamed getUserData (function) to "fetchUserProfile":
+File: src/api/user.ts
+  - Line 55, Column 10 to Line 55, Column 21: "fetchUserProfile"
+File: src/services/auth.ts
+  - Line 123, Column 15 to Line 123, Column 26: "fetchUserProfile"
+... (12 files total)
+```
+
+When multiple symbols match:
+
+```
+Claude: I'll rename the `data` variable to `userData`
+> Using cclsp.rename_symbol with symbol_name="data", new_name="userData"
+
+Result: Multiple symbols found matching "data". Please use rename_symbol_strict with one of these positions:
+- data (variable) at line 45, character 10
+- data (parameter) at line 89, character 25
+- data (property) at line 112, character 5
+
+> Using cclsp.rename_symbol_strict with line=45, character=10, new_name="userData"
+
+Result: Successfully renamed symbol at line 45, character 10 to "userData"
 ```
 
 ### Checking File Diagnostics
