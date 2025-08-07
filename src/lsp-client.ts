@@ -225,6 +225,9 @@ export class LSPClient {
           },
         },
         workspace: {
+          workspaceEdit: {
+            documentChanges: true,
+          },
           workspaceFolders: true,
         },
       },
@@ -750,23 +753,64 @@ export class LSPClient {
     });
 
     process.stderr.write(
-      `[DEBUG renameSymbol] Result type: ${typeof result}, hasChanges: ${result && typeof result === 'object' && 'changes' in result}\n`
+      `[DEBUG renameSymbol] Result type: ${typeof result}, hasChanges: ${result && typeof result === 'object' && 'changes' in result}, hasDocumentChanges: ${result && typeof result === 'object' && 'documentChanges' in result}\n`
     );
 
-    if (result && typeof result === 'object' && 'changes' in result) {
-      const workspaceEdit = result as {
-        changes: Record<
+    if (result && typeof result === 'object') {
+      // Handle the 'changes' format (older LSP servers)
+      if ('changes' in result) {
+        const workspaceEdit = result as {
+          changes: Record<
+            string,
+            Array<{ range: { start: Position; end: Position }; newText: string }>
+          >;
+        };
+
+        const changeCount = Object.keys(workspaceEdit.changes || {}).length;
+        process.stderr.write(
+          `[DEBUG renameSymbol] WorkspaceEdit has changes for ${changeCount} files\n`
+        );
+
+        return workspaceEdit;
+      }
+
+      // Handle the 'documentChanges' format (modern LSP servers like gopls)
+      if ('documentChanges' in result) {
+        const workspaceEdit = result as {
+          documentChanges?: Array<{
+            textDocument: { uri: string; version?: number };
+            edits: Array<{ range: { start: Position; end: Position }; newText: string }>;
+          }>;
+        };
+
+        process.stderr.write(
+          `[DEBUG renameSymbol] WorkspaceEdit has documentChanges with ${workspaceEdit.documentChanges?.length || 0} entries\n`
+        );
+
+        // Convert documentChanges to changes format for compatibility
+        const changes: Record<
           string,
           Array<{ range: { start: Position; end: Position }; newText: string }>
-        >;
-      };
+        > = {};
 
-      const changeCount = Object.keys(workspaceEdit.changes || {}).length;
-      process.stderr.write(
-        `[DEBUG renameSymbol] WorkspaceEdit has changes for ${changeCount} files\n`
-      );
+        if (workspaceEdit.documentChanges) {
+          for (const change of workspaceEdit.documentChanges) {
+            // Handle TextDocumentEdit (the only type needed for symbol renames)
+            if (change.textDocument && change.edits) {
+              const uri = change.textDocument.uri;
+              if (!changes[uri]) {
+                changes[uri] = [];
+              }
+              changes[uri].push(...change.edits);
+              process.stderr.write(
+                `[DEBUG renameSymbol] Added ${change.edits.length} edits for ${uri}\n`
+              );
+            }
+          }
+        }
 
-      return workspaceEdit;
+        return { changes };
+      }
     }
 
     process.stderr.write('[DEBUG renameSymbol] No rename changes available\n');
