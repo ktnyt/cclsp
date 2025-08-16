@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2025-08-16
+
+### Fixed
+
+- **Rename Operations**: Fixed rename operations with modern LSP servers like gopls that use DocumentChanges format (PR #11 by @secondcircle)
+  - Now properly handles both WorkspaceEdit and DocumentChanges response formats
+  - Improved compatibility with language servers using the newer LSP specification
+
+### Documentation
+
+- Updated MCP tools documentation to match current implementation
+- Added MseeP.ai badge to README (PR #4 by @lwsinclair)
+
+### Community Contributions
+
+Special thanks to our contributors for this release:
+- @secondcircle for fixing the critical rename operation issue with modern LSP servers (#11)
+- @lwsinclair for adding the MseeP.ai badge to improve project visibility (#4)
+- @maschwenk for the rootDir preloading fix in the previous release (#5)
+
+Your contributions help make cclsp better for everyone! 🙏
+
 ## [0.5.2] - 2025-08-04
 
 ### Added
