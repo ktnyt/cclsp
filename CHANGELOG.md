@@ -18,9 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated MCP tools documentation to match current implementation
 - Added MseeP.ai badge to README (PR #4 by @lwsinclair)
 
-### Community Contributions
+### Acknowledgements
 
-Special thanks to our contributors for this release:
+Special thanks to the contributors of recent enhancements and fixes.
+
 - @secondcircle for fixing the critical rename operation issue with modern LSP servers (#11)
 - @lwsinclair for adding the MseeP.ai badge to improve project visibility (#4)
 - @maschwenk for the rootDir preloading fix in the previous release (#5)
@@ -92,7 +93,7 @@ Your contributions help make cclsp better for everyone! 🙏
 ### Added
 
 - **Vue.js Language Server Support**: Added official Vue.js language server (Volar) configuration
-- **Svelte Language Server Support**: Added Svelte language server configuration 
+- **Svelte Language Server Support**: Added Svelte language server configuration
 - Support for `.vue` and `.svelte` file extensions in setup wizard
 - Installation guides and auto-install commands for Vue.js and Svelte language servers
 

@@ -157,5 +157,3 @@ The implementation handles LSP protocol specifics:
 - Preloading of servers for detected file types
 - Automatic server restart based on configured intervals
 - Manual server restart via MCP tool
-
-
