@@ -36,22 +36,80 @@ function canCreateSymlinks(): boolean {
 describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
   let TEST_DIR: string;
 
-  beforeEach(() => {
-    // Generate unique directory for each test run
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}-${process.pid}`;
-    TEST_DIR = process.env.RUNNER_TEMP
-      ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test-${uniqueId}`
-      : `/tmp/file-editor-symlink-test-${uniqueId}`;
+  beforeEach(async () => {
+    // Generate ultra-unique directory with multiple entropy sources and retry logic
+    let attempts = 0;
+    const maxAttempts = 5;
 
-    if (existsSync(TEST_DIR)) {
-      rmSync(TEST_DIR, { recursive: true, force: true });
+    while (attempts < maxAttempts) {
+      try {
+        const uniqueId = [
+          Date.now(),
+          Math.random().toString(36).substring(2, 15),
+          Math.random().toString(36).substring(2, 15),
+          process.pid,
+          process.hrtime.bigint().toString(36),
+          attempts,
+        ].join('-');
+
+        TEST_DIR = process.env.RUNNER_TEMP
+          ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test-${uniqueId}`
+          : `/tmp/file-editor-symlink-test-${uniqueId}`;
+
+        // Ensure directory doesn't exist before creating
+        if (existsSync(TEST_DIR)) {
+          rmSync(TEST_DIR, { recursive: true, force: true });
+          // Add small delay to ensure filesystem consistency
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+
+        mkdirSync(TEST_DIR, { recursive: true });
+
+        // Verify directory was created successfully
+        if (!existsSync(TEST_DIR)) {
+          throw new Error('Failed to create test directory');
+        }
+
+        break; // Success
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw new Error(
+            `Failed to create test directory after ${maxAttempts} attempts: ${error}`
+          );
+        }
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
     }
-    mkdirSync(TEST_DIR, { recursive: true });
   });
 
-  afterEach(() => {
-    if (existsSync(TEST_DIR)) {
-      rmSync(TEST_DIR, { recursive: true, force: true });
+  afterEach(async () => {
+    if (TEST_DIR && existsSync(TEST_DIR)) {
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        try {
+          rmSync(TEST_DIR, { recursive: true, force: true });
+
+          // Verify cleanup was successful
+          if (!existsSync(TEST_DIR)) {
+            break; // Success
+          }
+
+          // Wait before retry
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          attempts++;
+        } catch (error) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            console.warn(`Failed to cleanup test directory ${TEST_DIR}: ${error}`);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+        }
+      }
     }
   });
 
