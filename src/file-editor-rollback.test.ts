@@ -8,18 +8,13 @@ const TEST_DIR = process.env.CI
   ? `${process.cwd()}/test-tmp/file-editor-rollback-test`
   : '/tmp/file-editor-rollback-test';
 
-describe.skipIf(process.env.CI)('file-editor rollback without backups', () => {
+describe.skipIf(!!process.env.CI)('file-editor rollback without backups', () => {
   beforeEach(() => {
     // Clean up and create test directory
-    console.log(`[TEST DEBUG] TEST_DIR: ${TEST_DIR}`);
-    console.log(`[TEST DEBUG] RUNNER_TEMP: ${process.env.RUNNER_TEMP}`);
     if (existsSync(TEST_DIR)) {
-      console.log(`[TEST DEBUG] Removing existing directory: ${TEST_DIR}`);
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
-    console.log(`[TEST DEBUG] Creating directory: ${TEST_DIR}`);
     mkdirSync(TEST_DIR, { recursive: true });
-    console.log(`[TEST DEBUG] Directory exists after creation: ${existsSync(TEST_DIR)}`);
   });
 
   afterEach(() => {
