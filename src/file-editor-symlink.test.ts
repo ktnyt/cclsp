@@ -171,11 +171,14 @@ describe('file-editor symlink handling', () => {
     const backupPath = result.backupFiles[0];
     expect(backupPath).toBeDefined();
     expect(backupPath?.endsWith('.bak')).toBe(true);
-    expect(existsSync(backupPath!)).toBe(true);
-    expect(readFileSync(backupPath!, 'utf-8')).toBe('const x = 1;');
 
-    // Clean up backup
-    rmSync(backupPath!);
+    if (backupPath) {
+      expect(existsSync(backupPath)).toBe(true);
+      expect(readFileSync(backupPath, 'utf-8')).toBe('const x = 1;');
+
+      // Clean up backup
+      rmSync(backupPath);
+    }
   });
 
   it('should handle rollback correctly when editing through symlink fails', async () => {

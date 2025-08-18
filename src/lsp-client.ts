@@ -663,13 +663,21 @@ export class LSPClient {
     // Check if server already exists
     if (this.servers.has(key)) {
       process.stderr.write('[DEBUG getServer] Using existing server instance\n');
-      return this.servers.get(key)!;
+      const server = this.servers.get(key);
+      if (!server) {
+        throw new Error('Server exists in map but is undefined');
+      }
+      return server;
     }
 
     // Check if server is currently starting
     if (this.serversStarting.has(key)) {
       process.stderr.write('[DEBUG getServer] Waiting for server startup in progress\n');
-      return await this.serversStarting.get(key)!;
+      const startPromise = this.serversStarting.get(key);
+      if (!startPromise) {
+        throw new Error('Server start promise exists in map but is undefined');
+      }
+      return await startPromise;
     }
 
     // Start new server with concurrency protection
