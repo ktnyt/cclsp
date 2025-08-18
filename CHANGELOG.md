@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2025-08-18
+
+### Added
+
+- **File Editing Capability**: Complete transformation of rename operations from preview-only to actual file modification (PR #13 by @secondcircle)
+  - Atomic file operations with automatic backup and rollback support
+  - Symlink handling - correctly resolves and edits target files
+  - Multi-file workspace edits for complex rename operations across multiple files
+  - Comprehensive validation for file existence, permissions, and types
+  - `dry_run` parameter for safe preview mode on both `rename_symbol` and `rename_symbol_strict`
+
+### Enhanced
+
+- **LSP Server Synchronization**: Improved file synchronization after edits
+  - All modified files are properly synced with LSP servers after edits
+  - Version tracking for proper LSP protocol compliance
+  - Auto-open files that weren't previously opened get opened and synced automatically
+
+### Fixed
+
+- **Multi-file Rename Operations**: Now actually applies rename changes across all affected files instead of just returning preview
+- **LSP Document Synchronization**: Fixed sync issues with files modified by rename operations
+
+### Testing
+
+- Added comprehensive test suite for file editing functionality (100+ test cases)
+- Implemented CI workarounds for environment-specific test issues
+
+### Acknowledgements
+
+Special thanks to @secondcircle for the major enhancement that transforms cclsp from a read-only query tool into a functional refactoring tool with actual file editing capabilities (#13). This change significantly improves the user experience from preview-only to actually applying changes.
+
 ## [0.5.3] - 2025-08-16
 
 ### Fixed
