@@ -9,75 +9,75 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-// Check if symlinks are supported and reliable in this environment
-// Uses subprocess with timeout to avoid hanging on problematic CI environments
+// Check if symlinks are supported in this environment
 function canCreateSymlinks(): boolean {
-  // Allow CI override
-  if (process.env.FORCE_DISABLE_SYMLINK_TESTS === '1') {
-    return false;
-  }
-  if (process.env.FORCE_ENABLE_SYMLINK_TESTS === '1') {
-    return true;
-  }
-
   try {
-    const { spawnSync } = require('node:child_process');
+    const testFile = join(tmpdir(), `cclsp-test-target-${Date.now()}.txt`);
+    const testLink = join(tmpdir(), `cclsp-test-link-${Date.now()}.txt`);
 
-    // Test symlink creation, verification, and usage in subprocess with timeout
-    const script = `
-      const fs = require('node:fs');
-      const os = require('node:os');
-      const path = require('node:path');
-      try {
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cclsp-symlink-test-'));
-        const target = path.join(tmpDir, 'target.txt');
-        const link = path.join(tmpDir, 'link.txt');
-        
-        // Test full symlink lifecycle
-        fs.writeFileSync(target, 'test-content');
-        fs.symlinkSync(target, link);                    // create symlink
-        const st = fs.lstatSync(link);                   // verify is symlink  
-        if (!st.isSymbolicLink()) throw new Error('not a symlink');
-        
-        const linkTarget = fs.readlinkSync(link);       // readlink works
-        if (!linkTarget) throw new Error('empty readlink');
-        
-        const data = fs.readFileSync(link, 'utf8');     // follow symlink and read
-        if (data !== 'test-content') throw new Error('symlink read failed');
-        
-        // Cleanup
-        fs.unlinkSync(link);
-        fs.unlinkSync(target);
-        fs.rmdirSync(tmpDir);
-        process.exit(0);
-      } catch (e) {
-        process.exit(1);
-      }
-    `;
+    writeFileSync(testFile, 'test');
+    symlinkSync(testFile, testLink);
+    const isLink = lstatSync(testLink).isSymbolicLink();
 
-    const result = spawnSync(process.execPath, ['-e', script], {
-      timeout: 500, // 500ms timeout to catch hanging operations
-      stdio: 'ignore',
-    });
-
-    // If timeout or non-zero exit, symlinks are unreliable
-    if (result.error && result.error.code === 'ETIMEDOUT') {
-      if (process.env.CI && process.env.DEBUG_SYMLINK) {
-        console.log('[DEBUG] Symlink detection timed out in CI');
-      }
-      return false;
-    }
-
-    return result.status === 0;
+    rmSync(testFile, { force: true });
+    rmSync(testLink, { force: true });
+    return isLink;
   } catch (error) {
-    if (process.env.CI && process.env.DEBUG_SYMLINK) {
-      console.log('[DEBUG] Symlink detection failed:', error.message);
-    }
     return false;
+  }
+}
+
+// Timeout wrapper for potentially hanging operations in CI
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+// Robust symlink operations with timeout for CI environments
+class RobustSymlinkOps {
+  static async createSymlink(target: string, link: string): Promise<void> {
+    if (process.env.CI) {
+      // Use async with timeout in CI to prevent hangs
+      const { symlink } = require('node:fs/promises');
+      await withTimeout(symlink(target, link), 1000, 'symlink creation');
+    } else {
+      // Use sync version locally for simplicity
+      symlinkSync(target, link);
+    }
+  }
+
+  static async verifySymlink(link: string): Promise<boolean> {
+    if (process.env.CI) {
+      const { lstat } = require('node:fs/promises');
+      const stats = await withTimeout(lstat(link), 500, 'symlink verification');
+      return stats.isSymbolicLink();
+    }
+    return lstatSync(link).isSymbolicLink();
+  }
+
+  static async readSymlink(link: string): Promise<string> {
+    if (process.env.CI) {
+      const { readlink } = require('node:fs/promises');
+      return await withTimeout(readlink(link), 500, 'symlink readlink');
+    }
+    return readlinkSync(link);
+  }
+
+  static async readThroughSymlink(link: string): Promise<string> {
+    if (process.env.CI) {
+      const { readFile } = require('node:fs/promises');
+      return await withTimeout(readFile(link, 'utf-8'), 500, 'symlink file read');
+    }
+    return readFileSync(link, 'utf-8');
   }
 }
 
@@ -189,14 +189,14 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     const originalContent = 'const oldName = 42;';
     writeFileSync(targetPath, originalContent);
 
-    // Create a symlink pointing to the target
+    // Create a symlink pointing to the target using robust operations
     const symlinkPath = join(TEST_DIR, 'link.ts');
-    symlinkSync(targetPath, symlinkPath);
+    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
 
-    // Verify symlink was created correctly
-    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(symlinkPath)).toBe(targetPath);
-    expect(readFileSync(symlinkPath, 'utf-8')).toBe(originalContent);
+    // Verify symlink was created correctly using robust operations
+    expect(await RobustSymlinkOps.verifySymlink(symlinkPath)).toBe(true);
+    expect(await RobustSymlinkOps.readSymlink(symlinkPath)).toBe(targetPath);
+    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(originalContent);
 
     // Apply an edit to the symlink path
     const result = await applyWorkspaceEdit({
@@ -216,16 +216,16 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(true);
 
     // CRITICAL: The symlink should STILL be a symlink, not replaced with a regular file
-    const symlinkStatsAfter = lstatSync(symlinkPath);
-    expect(symlinkStatsAfter.isSymbolicLink()).toBe(true);
-    expect(symlinkStatsAfter.isFile()).toBe(false);
+    const symlinkStatsAfter = await RobustSymlinkOps.verifySymlink(symlinkPath);
+    expect(symlinkStatsAfter).toBe(true);
+    expect(lstatSync(symlinkPath).isFile()).toBe(false);
 
     // The symlink should still point to the same target
-    expect(readlinkSync(symlinkPath)).toBe(targetPath);
+    expect(await RobustSymlinkOps.readSymlink(symlinkPath)).toBe(targetPath);
 
     // The content should be updated when read through either path
     const expectedContent = 'const newName = 42;';
-    expect(readFileSync(symlinkPath, 'utf-8')).toBe(expectedContent);
+    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(expectedContent);
     expect(readFileSync(targetPath, 'utf-8')).toBe(expectedContent);
   });
 
@@ -244,11 +244,11 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     writeFileSync(target2, 'class OldClass2 {}');
     writeFileSync(regularFile, 'class OldClass3 {}');
 
-    // Create symlinks
+    // Create symlinks using robust operations
     const link1 = join(TEST_DIR, 'link1.ts');
     const link2 = join(TEST_DIR, 'link2.ts');
-    symlinkSync(target1, link1);
-    symlinkSync(target2, link2);
+    await RobustSymlinkOps.createSymlink(target1, link1);
+    await RobustSymlinkOps.createSymlink(target2, link2);
 
     // Apply edits to all files (mix of symlinks and regular)
     const result = await applyWorkspaceEdit({
@@ -286,8 +286,8 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(true);
 
     // Verify symlinks are still symlinks
-    expect(lstatSync(link1).isSymbolicLink()).toBe(true);
-    expect(lstatSync(link2).isSymbolicLink()).toBe(true);
+    expect(await RobustSymlinkOps.verifySymlink(link1)).toBe(true);
+    expect(await RobustSymlinkOps.verifySymlink(link2)).toBe(true);
     expect(lstatSync(regularFile).isFile()).toBe(true);
     expect(lstatSync(regularFile).isSymbolicLink()).toBe(false);
 
@@ -307,7 +307,7 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     const symlinkPath = join(TEST_DIR, 'link.ts');
 
     writeFileSync(targetPath, 'const x = 1;');
-    symlinkSync(targetPath, symlinkPath);
+    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
 
     const result = await applyWorkspaceEdit(
       {
@@ -354,7 +354,7 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
 
     const originalContent = 'const x = 1;\nconst y = 2;';
     writeFileSync(targetPath, originalContent);
-    symlinkSync(targetPath, symlinkPath);
+    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
 
     // Apply an edit that will fail validation
     const result = await applyWorkspaceEdit({
@@ -374,10 +374,10 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(false);
 
     // Symlink should still be a symlink
-    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    expect(await RobustSymlinkOps.verifySymlink(symlinkPath)).toBe(true);
 
     // Target content should be unchanged
     expect(readFileSync(targetPath, 'utf-8')).toBe(originalContent);
-    expect(readFileSync(symlinkPath, 'utf-8')).toBe(originalContent);
+    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(originalContent);
   });
 });
