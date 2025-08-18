@@ -11,10 +11,15 @@ const TEST_DIR = process.env.RUNNER_TEMP
 describe('file-editor rollback without backups', () => {
   beforeEach(() => {
     // Clean up and create test directory
+    console.log(`[TEST DEBUG] TEST_DIR: ${TEST_DIR}`);
+    console.log(`[TEST DEBUG] RUNNER_TEMP: ${process.env.RUNNER_TEMP}`);
     if (existsSync(TEST_DIR)) {
+      console.log(`[TEST DEBUG] Removing existing directory: ${TEST_DIR}`);
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
+    console.log(`[TEST DEBUG] Creating directory: ${TEST_DIR}`);
     mkdirSync(TEST_DIR, { recursive: true });
+    console.log(`[TEST DEBUG] Directory exists after creation: ${existsSync(TEST_DIR)}`);
   });
 
   afterEach(() => {
@@ -25,14 +30,23 @@ describe('file-editor rollback without backups', () => {
   });
 
   it('should rollback changes when createBackups=false and an error occurs', async () => {
+    console.log(`[TEST DEBUG] Test starting, TEST_DIR: ${TEST_DIR}`);
+    console.log(`[TEST DEBUG] Directory exists at test start: ${existsSync(TEST_DIR)}`);
+
     const file1 = join(TEST_DIR, 'file1.ts');
     const file2 = join(TEST_DIR, 'file2.ts');
+
+    console.log(`[TEST DEBUG] Creating files: ${file1}, ${file2}`);
 
     const originalContent1 = 'const x = 1;';
     const originalContent2 = 'const y = 2;';
 
     writeFileSync(file1, originalContent1);
     writeFileSync(file2, originalContent2);
+
+    console.log(
+      `[TEST DEBUG] Files created - file1 exists: ${existsSync(file1)}, file2 exists: ${existsSync(file2)}`
+    );
 
     // Create an edit that will succeed on file1 but fail on file2
     const result = await applyWorkspaceEdit(
