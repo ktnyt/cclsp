@@ -41,8 +41,21 @@ describe('file-editor rollback without backups', () => {
     const originalContent1 = 'const x = 1;';
     const originalContent2 = 'const y = 2;';
 
-    writeFileSync(file1, originalContent1);
-    writeFileSync(file2, originalContent2);
+    try {
+      writeFileSync(file1, originalContent1);
+      console.log('[TEST DEBUG] file1 written successfully');
+    } catch (error) {
+      console.log(`[TEST DEBUG] file1 write failed: ${error}`);
+      throw error;
+    }
+
+    try {
+      writeFileSync(file2, originalContent2);
+      console.log('[TEST DEBUG] file2 written successfully');
+    } catch (error) {
+      console.log(`[TEST DEBUG] file2 write failed: ${error}`);
+      throw error;
+    }
 
     console.log(
       `[TEST DEBUG] Files created - file1 exists: ${existsSync(file1)}, file2 exists: ${existsSync(file2)}`
