@@ -4,109 +4,27 @@ import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
+const TEST_DIR = process.env.RUNNER_TEMP
+  ? `${process.env.RUNNER_TEMP}/file-editor-rollback-test`
+  : '/tmp/file-editor-rollback-test';
+
 describe('file-editor rollback without backups', () => {
-  let TEST_DIR: string;
-
-  // Helper function to create test directory with robust error handling
-  async function createTestDir(): Promise<string> {
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (attempts < maxAttempts) {
-      try {
-        const uniqueId = [
-          Date.now(),
-          Math.random().toString(36).substring(2, 15),
-          Math.random().toString(36).substring(2, 15),
-          process.pid,
-          process.hrtime.bigint().toString(36),
-          attempts,
-        ].join('-');
-
-        // Always use workspace temp to avoid CI permission issues with /tmp
-        const tmpRoot = `${process.cwd()}/tmp`;
-        const testDir = `${tmpRoot}/file-editor-rollback-test-${uniqueId}`;
-
-        // Ensure parent directory exists
-        mkdirSync(tmpRoot, { recursive: true });
-
-        // Clean up if directory exists
-        if (existsSync(testDir)) {
-          rmSync(testDir, { recursive: true, force: true });
-          // Force filesystem sync
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-
-        mkdirSync(testDir, { recursive: true });
-
-        // Verify directory was created and is accessible
-        if (!existsSync(testDir)) {
-          throw new Error('Directory creation failed - does not exist');
-        }
-
-        // Test directory writability
-        const testFile = `${testDir}/.test-write`;
-        writeFileSync(testFile, 'test');
-        if (!existsSync(testFile)) {
-          throw new Error('Directory creation failed - not writable');
-        }
-        rmSync(testFile);
-
-        return testDir;
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw new Error(
-            `Failed to create test directory after ${maxAttempts} attempts: ${error}`
-          );
-        }
-        // Wait before retry with exponential backoff
-        await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
-      }
+  beforeEach(() => {
+    // Clean up and create test directory
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
-    throw new Error('Unreachable');
-  }
-
-  beforeEach(async () => {
-    // Create directory in beforeEach but verify in each test
-    TEST_DIR = await createTestDir();
+    mkdirSync(TEST_DIR, { recursive: true });
   });
 
-  afterEach(async () => {
-    if (TEST_DIR && existsSync(TEST_DIR)) {
-      let attempts = 0;
-      const maxAttempts = 3;
-
-      while (attempts < maxAttempts) {
-        try {
-          rmSync(TEST_DIR, { recursive: true, force: true });
-
-          // Verify cleanup was successful
-          if (!existsSync(TEST_DIR)) {
-            break; // Success
-          }
-
-          // Wait before retry
-          await new Promise((resolve) => setTimeout(resolve, 20));
-          attempts++;
-        } catch (error) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            console.warn(`Failed to cleanup test directory ${TEST_DIR}: ${error}`);
-          } else {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-        }
-      }
+  afterEach(() => {
+    // Clean up test directory
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
 
   it('should rollback changes when createBackups=false and an error occurs', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const file1 = join(TEST_DIR, 'file1.ts');
     const file2 = join(TEST_DIR, 'file2.ts');
 
@@ -160,11 +78,6 @@ describe('file-editor rollback without backups', () => {
   });
 
   it('should handle multi-line edit with invalid character positions', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const filePath = join(TEST_DIR, 'test.ts');
     const content = 'line1\nline2\nline3';
     writeFileSync(filePath, content);
@@ -197,11 +110,6 @@ describe('file-editor rollback without backups', () => {
   });
 
   it('should detect inverted ranges (start > end)', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const filePath = join(TEST_DIR, 'test.ts');
     writeFileSync(filePath, 'const x = 1;\nconst y = 2;');
 
@@ -228,11 +136,6 @@ describe('file-editor rollback without backups', () => {
   });
 
   it('should detect same-line inverted character positions', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const filePath = join(TEST_DIR, 'test.ts');
     writeFileSync(filePath, 'const x = 1;');
 

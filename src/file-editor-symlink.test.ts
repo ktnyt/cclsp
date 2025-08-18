@@ -76,109 +76,27 @@ async function robustReadThroughSymlink(link: string): Promise<string> {
   return readFileSync(link, 'utf-8');
 }
 
+const TEST_DIR = process.env.RUNNER_TEMP
+  ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test`
+  : '/tmp/file-editor-symlink-test';
+
 describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
-  let TEST_DIR: string;
-
-  // Helper function to create test directory with robust error handling
-  async function createTestDir(): Promise<string> {
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (attempts < maxAttempts) {
-      try {
-        const uniqueId = [
-          Date.now(),
-          Math.random().toString(36).substring(2, 15),
-          Math.random().toString(36).substring(2, 15),
-          process.pid,
-          process.hrtime.bigint().toString(36),
-          attempts,
-        ].join('-');
-
-        // Use workspace temp directory to avoid permission issues
-        const tmpRoot = `${process.cwd()}/tmp`;
-        const testDir = `${tmpRoot}/file-editor-symlink-test-${uniqueId}`;
-
-        // Ensure parent directory exists
-        mkdirSync(tmpRoot, { recursive: true });
-
-        // Clean up if directory exists
-        if (existsSync(testDir)) {
-          rmSync(testDir, { recursive: true, force: true });
-          // Force filesystem sync
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-
-        mkdirSync(testDir, { recursive: true });
-
-        // Verify directory was created and is accessible
-        if (!existsSync(testDir)) {
-          throw new Error('Directory creation failed - does not exist');
-        }
-
-        // Test directory writability
-        const testFile = `${testDir}/.test-write`;
-        writeFileSync(testFile, 'test');
-        if (!existsSync(testFile)) {
-          throw new Error('Directory creation failed - not writable');
-        }
-        rmSync(testFile);
-
-        return testDir;
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw new Error(
-            `Failed to create test directory after ${maxAttempts} attempts: ${error}`
-          );
-        }
-        // Wait before retry with exponential backoff
-        await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
-      }
+  beforeEach(() => {
+    // Clean up and create test directory
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
-    throw new Error('Unreachable');
-  }
-
-  beforeEach(async () => {
-    // Create directory in beforeEach but verify in each test
-    TEST_DIR = await createTestDir();
+    mkdirSync(TEST_DIR, { recursive: true });
   });
 
-  afterEach(async () => {
-    if (TEST_DIR && existsSync(TEST_DIR)) {
-      let attempts = 0;
-      const maxAttempts = 3;
-
-      while (attempts < maxAttempts) {
-        try {
-          rmSync(TEST_DIR, { recursive: true, force: true });
-
-          // Verify cleanup was successful
-          if (!existsSync(TEST_DIR)) {
-            break; // Success
-          }
-
-          // Wait before retry
-          await new Promise((resolve) => setTimeout(resolve, 20));
-          attempts++;
-        } catch (error) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            console.warn(`Failed to cleanup test directory ${TEST_DIR}: ${error}`);
-          } else {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-        }
-      }
+  afterEach(() => {
+    // Clean up test directory
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
 
   it('should edit the target file without replacing the symlink', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     // Create a target file
     const targetPath = join(TEST_DIR, 'target.ts');
     const originalContent = 'const oldName = 42;';
@@ -225,11 +143,6 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
   });
 
   it('should handle edits to multiple symlinks and regular files', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     // Create target files
     const target1 = join(TEST_DIR, 'target1.ts');
     const target2 = join(TEST_DIR, 'target2.ts');
@@ -293,11 +206,6 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
   });
 
   it('should create backups of the target file, not the symlink', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const targetPath = join(TEST_DIR, 'target.ts');
     const symlinkPath = join(TEST_DIR, 'link.ts');
 
@@ -339,11 +247,6 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
   });
 
   it('should handle rollback correctly when editing through symlink fails', async () => {
-    // Ensure test directory exists (guard against race conditions)
-    if (!existsSync(TEST_DIR)) {
-      TEST_DIR = await createTestDir();
-    }
-
     const targetPath = join(TEST_DIR, 'target.ts');
     const symlinkPath = join(TEST_DIR, 'link.ts');
 
