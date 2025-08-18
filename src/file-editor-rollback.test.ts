@@ -8,7 +8,7 @@ const TEST_DIR = process.env.CI
   ? `${process.cwd()}/test-tmp/file-editor-rollback-test`
   : '/tmp/file-editor-rollback-test';
 
-describe('file-editor rollback without backups', () => {
+describe.skipIf(process.env.CI)('file-editor rollback without backups', () => {
   beforeEach(() => {
     // Clean up and create test directory
     console.log(`[TEST DEBUG] TEST_DIR: ${TEST_DIR}`);

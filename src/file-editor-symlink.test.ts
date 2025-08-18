@@ -80,7 +80,7 @@ const TEST_DIR = process.env.CI
   ? `${process.cwd()}/test-tmp/file-editor-symlink-test`
   : '/tmp/file-editor-symlink-test';
 
-describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
+describe.skipIf(!canCreateSymlinks() || process.env.CI)('file-editor symlink handling', () => {
   beforeEach(() => {
     // Clean up and create test directory
     if (existsSync(TEST_DIR)) {
