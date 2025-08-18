@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/file-editor-rollback-test`
+const TEST_DIR = process.env.CI
+  ? `${process.cwd()}/test-tmp/file-editor-rollback-test`
   : '/tmp/file-editor-rollback-test';
 
 describe('file-editor rollback without backups', () => {

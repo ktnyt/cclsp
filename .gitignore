@@ -57,6 +57,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+test-tmp/
 
 # MCP specific
 mcp/*/storage.json
