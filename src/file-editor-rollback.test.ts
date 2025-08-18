@@ -44,21 +44,29 @@ describe('file-editor rollback without backups', () => {
     try {
       writeFileSync(file1, originalContent1);
       console.log('[TEST DEBUG] file1 written successfully');
+      console.log(`[TEST DEBUG] file1 realpath: ${require('node:fs').realpathSync(file1)}`);
     } catch (error) {
-      console.log(`[TEST DEBUG] file1 write failed: ${error}`);
+      console.log(`[TEST DEBUG] file1 write/realpath failed: ${error}`);
       throw error;
     }
 
     try {
       writeFileSync(file2, originalContent2);
       console.log('[TEST DEBUG] file2 written successfully');
+      console.log(`[TEST DEBUG] file2 realpath: ${require('node:fs').realpathSync(file2)}`);
     } catch (error) {
-      console.log(`[TEST DEBUG] file2 write failed: ${error}`);
+      console.log(`[TEST DEBUG] file2 write/realpath failed: ${error}`);
       throw error;
     }
 
     console.log(
       `[TEST DEBUG] Files created - file1 exists: ${existsSync(file1)}, file2 exists: ${existsSync(file2)}`
+    );
+
+    // Add small delay to see if timing issue
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    console.log(
+      `[TEST DEBUG] After 10ms delay - file1 exists: ${existsSync(file1)}, file2 exists: ${existsSync(file2)}`
     );
 
     // Create an edit that will succeed on file1 but fail on file2
