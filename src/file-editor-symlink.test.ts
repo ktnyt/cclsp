@@ -9,26 +9,74 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-// Check if symlinks are supported in this environment
+// Check if symlinks are supported and reliable in this environment
+// Uses subprocess with timeout to avoid hanging on problematic CI environments
 function canCreateSymlinks(): boolean {
+  // Allow CI override
+  if (process.env.FORCE_DISABLE_SYMLINK_TESTS === '1') {
+    return false;
+  }
+  if (process.env.FORCE_ENABLE_SYMLINK_TESTS === '1') {
+    return true;
+  }
+
   try {
-    const tmpdir = require('node:os').tmpdir();
-    const testFile = join(tmpdir, `cclsp-test-target-${Date.now()}.txt`);
-    const testLink = join(tmpdir, `cclsp-test-link-${Date.now()}.txt`);
+    const { spawnSync } = require('node:child_process');
 
-    writeFileSync(testFile, 'test');
-    symlinkSync(testFile, testLink);
-    const isLink = lstatSync(testLink).isSymbolicLink();
+    // Test symlink creation, verification, and usage in subprocess with timeout
+    const script = `
+      const fs = require('node:fs');
+      const os = require('node:os');
+      const path = require('node:path');
+      try {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cclsp-symlink-test-'));
+        const target = path.join(tmpDir, 'target.txt');
+        const link = path.join(tmpDir, 'link.txt');
+        
+        // Test full symlink lifecycle
+        fs.writeFileSync(target, 'test-content');
+        fs.symlinkSync(target, link);                    // create symlink
+        const st = fs.lstatSync(link);                   // verify is symlink  
+        if (!st.isSymbolicLink()) throw new Error('not a symlink');
+        
+        const linkTarget = fs.readlinkSync(link);       // readlink works
+        if (!linkTarget) throw new Error('empty readlink');
+        
+        const data = fs.readFileSync(link, 'utf8');     // follow symlink and read
+        if (data !== 'test-content') throw new Error('symlink read failed');
+        
+        // Cleanup
+        fs.unlinkSync(link);
+        fs.unlinkSync(target);
+        fs.rmdirSync(tmpDir);
+        process.exit(0);
+      } catch (e) {
+        process.exit(1);
+      }
+    `;
 
-    rmSync(testFile, { force: true });
-    rmSync(testLink, { force: true });
-    return isLink;
+    const result = spawnSync(process.execPath, ['-e', script], {
+      timeout: 500, // 500ms timeout to catch hanging operations
+      stdio: 'ignore',
+    });
+
+    // If timeout or non-zero exit, symlinks are unreliable
+    if (result.error && result.error.code === 'ETIMEDOUT') {
+      if (process.env.CI && process.env.DEBUG_SYMLINK) {
+        console.log('[DEBUG] Symlink detection timed out in CI');
+      }
+      return false;
+    }
+
+    return result.status === 0;
   } catch (error) {
+    if (process.env.CI && process.env.DEBUG_SYMLINK) {
+      console.log('[DEBUG] Symlink detection failed:', error.message);
+    }
     return false;
   }
 }
