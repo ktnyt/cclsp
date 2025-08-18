@@ -9,6 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
@@ -17,7 +18,26 @@ const TEST_DIR = process.env.RUNNER_TEMP
   ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test`
   : '/tmp/file-editor-symlink-test';
 
-describe('file-editor symlink handling', () => {
+// Check if symlinks are supported in this environment
+function canCreateSymlinks(): boolean {
+  try {
+    const tmpdir = require('node:os').tmpdir();
+    const testFile = join(tmpdir, `cclsp-test-target-${Date.now()}.txt`);
+    const testLink = join(tmpdir, `cclsp-test-link-${Date.now()}.txt`);
+
+    writeFileSync(testFile, 'test');
+    symlinkSync(testFile, testLink);
+    const isLink = lstatSync(testLink).isSymbolicLink();
+
+    rmSync(testFile, { force: true });
+    rmSync(testLink, { force: true });
+    return isLink;
+  } catch (error) {
+    return false;
+  }
+}
+
+describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
   beforeEach(() => {
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
