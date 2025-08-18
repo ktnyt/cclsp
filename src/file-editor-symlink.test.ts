@@ -9,6 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { lstat, readFile, readlink, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
@@ -46,7 +47,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Pro
 async function robustCreateSymlink(target: string, link: string): Promise<void> {
   if (process.env.CI) {
     // Use async with timeout in CI to prevent hangs
-    const { symlink } = require('node:fs/promises');
     await withTimeout(symlink(target, link), 1000, 'symlink creation');
   } else {
     // Use sync version locally for simplicity
@@ -56,7 +56,6 @@ async function robustCreateSymlink(target: string, link: string): Promise<void> 
 
 async function robustVerifySymlink(link: string): Promise<boolean> {
   if (process.env.CI) {
-    const { lstat } = require('node:fs/promises');
     const stats = await withTimeout(lstat(link), 500, 'symlink verification');
     return stats.isSymbolicLink();
   }
@@ -65,7 +64,6 @@ async function robustVerifySymlink(link: string): Promise<boolean> {
 
 async function robustReadSymlink(link: string): Promise<string> {
   if (process.env.CI) {
-    const { readlink } = require('node:fs/promises');
     return await withTimeout(readlink(link), 500, 'symlink readlink');
   }
   return readlinkSync(link);
@@ -73,7 +71,6 @@ async function robustReadSymlink(link: string): Promise<string> {
 
 async function robustReadThroughSymlink(link: string): Promise<string> {
   if (process.env.CI) {
-    const { readFile } = require('node:fs/promises');
     return await withTimeout(readFile(link, 'utf-8'), 500, 'symlink file read');
   }
   return readFileSync(link, 'utf-8');
