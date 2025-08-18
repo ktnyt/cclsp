@@ -43,42 +43,40 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Pro
 }
 
 // Robust symlink operations with timeout for CI environments
-class RobustSymlinkOps {
-  static async createSymlink(target: string, link: string): Promise<void> {
-    if (process.env.CI) {
-      // Use async with timeout in CI to prevent hangs
-      const { symlink } = require('node:fs/promises');
-      await withTimeout(symlink(target, link), 1000, 'symlink creation');
-    } else {
-      // Use sync version locally for simplicity
-      symlinkSync(target, link);
-    }
+async function robustCreateSymlink(target: string, link: string): Promise<void> {
+  if (process.env.CI) {
+    // Use async with timeout in CI to prevent hangs
+    const { symlink } = require('node:fs/promises');
+    await withTimeout(symlink(target, link), 1000, 'symlink creation');
+  } else {
+    // Use sync version locally for simplicity
+    symlinkSync(target, link);
   }
+}
 
-  static async verifySymlink(link: string): Promise<boolean> {
-    if (process.env.CI) {
-      const { lstat } = require('node:fs/promises');
-      const stats = await withTimeout(lstat(link), 500, 'symlink verification');
-      return stats.isSymbolicLink();
-    }
-    return lstatSync(link).isSymbolicLink();
+async function robustVerifySymlink(link: string): Promise<boolean> {
+  if (process.env.CI) {
+    const { lstat } = require('node:fs/promises');
+    const stats = await withTimeout(lstat(link), 500, 'symlink verification');
+    return stats.isSymbolicLink();
   }
+  return lstatSync(link).isSymbolicLink();
+}
 
-  static async readSymlink(link: string): Promise<string> {
-    if (process.env.CI) {
-      const { readlink } = require('node:fs/promises');
-      return await withTimeout(readlink(link), 500, 'symlink readlink');
-    }
-    return readlinkSync(link);
+async function robustReadSymlink(link: string): Promise<string> {
+  if (process.env.CI) {
+    const { readlink } = require('node:fs/promises');
+    return await withTimeout(readlink(link), 500, 'symlink readlink');
   }
+  return readlinkSync(link);
+}
 
-  static async readThroughSymlink(link: string): Promise<string> {
-    if (process.env.CI) {
-      const { readFile } = require('node:fs/promises');
-      return await withTimeout(readFile(link, 'utf-8'), 500, 'symlink file read');
-    }
-    return readFileSync(link, 'utf-8');
+async function robustReadThroughSymlink(link: string): Promise<string> {
+  if (process.env.CI) {
+    const { readFile } = require('node:fs/promises');
+    return await withTimeout(readFile(link, 'utf-8'), 500, 'symlink file read');
   }
+  return readFileSync(link, 'utf-8');
 }
 
 describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
@@ -191,12 +189,12 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
 
     // Create a symlink pointing to the target using robust operations
     const symlinkPath = join(TEST_DIR, 'link.ts');
-    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
+    await robustCreateSymlink(targetPath, symlinkPath);
 
     // Verify symlink was created correctly using robust operations
-    expect(await RobustSymlinkOps.verifySymlink(symlinkPath)).toBe(true);
-    expect(await RobustSymlinkOps.readSymlink(symlinkPath)).toBe(targetPath);
-    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(originalContent);
+    expect(await robustVerifySymlink(symlinkPath)).toBe(true);
+    expect(await robustReadSymlink(symlinkPath)).toBe(targetPath);
+    expect(await robustReadThroughSymlink(symlinkPath)).toBe(originalContent);
 
     // Apply an edit to the symlink path
     const result = await applyWorkspaceEdit({
@@ -216,16 +214,16 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(true);
 
     // CRITICAL: The symlink should STILL be a symlink, not replaced with a regular file
-    const symlinkStatsAfter = await RobustSymlinkOps.verifySymlink(symlinkPath);
+    const symlinkStatsAfter = await robustVerifySymlink(symlinkPath);
     expect(symlinkStatsAfter).toBe(true);
     expect(lstatSync(symlinkPath).isFile()).toBe(false);
 
     // The symlink should still point to the same target
-    expect(await RobustSymlinkOps.readSymlink(symlinkPath)).toBe(targetPath);
+    expect(await robustReadSymlink(symlinkPath)).toBe(targetPath);
 
     // The content should be updated when read through either path
     const expectedContent = 'const newName = 42;';
-    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(expectedContent);
+    expect(await robustReadThroughSymlink(symlinkPath)).toBe(expectedContent);
     expect(readFileSync(targetPath, 'utf-8')).toBe(expectedContent);
   });
 
@@ -247,8 +245,8 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     // Create symlinks using robust operations
     const link1 = join(TEST_DIR, 'link1.ts');
     const link2 = join(TEST_DIR, 'link2.ts');
-    await RobustSymlinkOps.createSymlink(target1, link1);
-    await RobustSymlinkOps.createSymlink(target2, link2);
+    await robustCreateSymlink(target1, link1);
+    await robustCreateSymlink(target2, link2);
 
     // Apply edits to all files (mix of symlinks and regular)
     const result = await applyWorkspaceEdit({
@@ -286,8 +284,8 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(true);
 
     // Verify symlinks are still symlinks
-    expect(await RobustSymlinkOps.verifySymlink(link1)).toBe(true);
-    expect(await RobustSymlinkOps.verifySymlink(link2)).toBe(true);
+    expect(await robustVerifySymlink(link1)).toBe(true);
+    expect(await robustVerifySymlink(link2)).toBe(true);
     expect(lstatSync(regularFile).isFile()).toBe(true);
     expect(lstatSync(regularFile).isSymbolicLink()).toBe(false);
 
@@ -307,7 +305,7 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     const symlinkPath = join(TEST_DIR, 'link.ts');
 
     writeFileSync(targetPath, 'const x = 1;');
-    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
+    await robustCreateSymlink(targetPath, symlinkPath);
 
     const result = await applyWorkspaceEdit(
       {
@@ -354,7 +352,7 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
 
     const originalContent = 'const x = 1;\nconst y = 2;';
     writeFileSync(targetPath, originalContent);
-    await RobustSymlinkOps.createSymlink(targetPath, symlinkPath);
+    await robustCreateSymlink(targetPath, symlinkPath);
 
     // Apply an edit that will fail validation
     const result = await applyWorkspaceEdit({
@@ -374,10 +372,10 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
     expect(result.success).toBe(false);
 
     // Symlink should still be a symlink
-    expect(await RobustSymlinkOps.verifySymlink(symlinkPath)).toBe(true);
+    expect(await robustVerifySymlink(symlinkPath)).toBe(true);
 
     // Target content should be unchanged
     expect(readFileSync(targetPath, 'utf-8')).toBe(originalContent);
-    expect(await RobustSymlinkOps.readThroughSymlink(symlinkPath)).toBe(originalContent);
+    expect(await robustReadThroughSymlink(symlinkPath)).toBe(originalContent);
   });
 });
