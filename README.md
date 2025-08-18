@@ -374,7 +374,7 @@ Find all references to a symbol by name and kind in a file. Returns references f
 
 ### `rename_symbol`
 
-Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict.
+Rename a symbol by name and kind in a file. **This tool now applies the rename to all affected files by default.** If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict.
 
 **Parameters:**
 
@@ -382,10 +382,16 @@ Rename a symbol by name and kind in a file. If multiple symbols match, returns c
 - `symbol_name`: The name of the symbol
 - `symbol_kind`: The kind of symbol (function, class, variable, method, etc.) (optional)
 - `new_name`: The new name for the symbol
+- `dry_run`: If true, only preview the changes without applying them (optional, default: false)
+
+**Note:** When `dry_run` is false (default), the tool will:
+- Apply the rename to all affected files
+- Create backup files with `.bak` extension
+- Return the list of modified files
 
 ### `rename_symbol_strict`
 
-Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates.
+Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates. **This tool now applies the rename to all affected files by default.**
 
 **Parameters:**
 
@@ -393,6 +399,7 @@ Rename a symbol at a specific position in a file. Use this when rename_symbol re
 - `line`: The line number (1-indexed)
 - `character`: The character position in the line (1-indexed)
 - `new_name`: The new name for the symbol
+- `dry_run`: If true, only preview the changes without applying them (optional, default: false)
 
 ### `get_diagnostics`
 
@@ -439,13 +446,28 @@ Results: Found 5 references:
 
 ### Renaming Symbols
 
-Safe refactoring across the entire codebase:
+Safe refactoring across the entire codebase (now with actual file modification!):
 
 ```
 Claude: I'll rename `getUserData` to `fetchUserProfile`
 > Using cclsp.rename_symbol with symbol_name="getUserData", new_name="fetchUserProfile"
 
-Result: Successfully renamed getUserData (function) to "fetchUserProfile":
+Result: Successfully renamed getUserData (function) to "fetchUserProfile".
+
+Modified files:
+- src/api/user.ts
+- src/services/auth.ts
+- src/components/UserProfile.tsx
+... (12 files total)
+```
+
+Preview changes before applying (using dry_run):
+
+```
+Claude: Let me first preview what will be renamed
+> Using cclsp.rename_symbol with symbol_name="getUserData", new_name="fetchUserProfile", dry_run=true
+
+Result: [DRY RUN] Would rename getUserData (function) to "fetchUserProfile":
 File: src/api/user.ts
   - Line 55, Column 10 to Line 55, Column 21: "fetchUserProfile"
 File: src/services/auth.ts
@@ -466,7 +488,10 @@ Result: Multiple symbols found matching "data". Please use rename_symbol_strict 
 
 > Using cclsp.rename_symbol_strict with line=45, character=10, new_name="userData"
 
-Result: Successfully renamed symbol at line 45, character 10 to "userData"
+Result: Successfully renamed symbol at line 45, character 10 to "userData".
+
+Modified files:
+- src/utils/parser.ts
 ```
 
 ### Checking File Diagnostics

@@ -33,6 +33,7 @@ interface ServerState {
   initialized: boolean;
   initializationPromise: Promise<void>;
   openFiles: Set<string>;
+  fileVersions: Map<string, number>; // Track file versions for didChange notifications
   startTime: number;
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
@@ -45,6 +46,7 @@ interface ServerState {
 export class LSPClient {
   private config: Config;
   private servers: Map<string, ServerState> = new Map();
+  private serversStarting: Map<string, Promise<ServerState>> = new Map();
   private nextId = 1;
   private pendingRequests: Map<
     number,
@@ -138,6 +140,7 @@ export class LSPClient {
       initialized: false,
       initializationPromise,
       openFiles: new Set(),
+      fileVersions: new Map(),
       startTime: Date.now(),
       config: serverConfig,
       restartTimer: undefined,
@@ -509,6 +512,52 @@ export class LSPClient {
     return { success, restarted, failed, message };
   }
 
+  /**
+   * Synchronize file content with LSP server after external modifications
+   * This should be called after any disk writes to keep the LSP server in sync
+   */
+  async syncFileContent(filePath: string): Promise<void> {
+    try {
+      const serverState = await this.getServer(filePath);
+
+      // If file is not already open in the LSP server, open it first
+      if (!serverState.openFiles.has(filePath)) {
+        process.stderr.write(
+          `[DEBUG syncFileContent] File not open, opening it first: ${filePath}\n`
+        );
+        await this.ensureFileOpen(serverState, filePath);
+      }
+
+      process.stderr.write(`[DEBUG syncFileContent] Syncing file: ${filePath}\n`);
+
+      const fileContent = readFileSync(filePath, 'utf-8');
+      const uri = pathToUri(filePath);
+
+      // Increment version and send didChange notification
+      const version = (serverState.fileVersions.get(filePath) || 1) + 1;
+      serverState.fileVersions.set(filePath, version);
+
+      await this.sendNotification(serverState.process, 'textDocument/didChange', {
+        textDocument: {
+          uri,
+          version,
+        },
+        contentChanges: [
+          {
+            text: fileContent,
+          },
+        ],
+      });
+
+      process.stderr.write(
+        `[DEBUG syncFileContent] File synced with version ${version}: ${filePath}\n`
+      );
+    } catch (error) {
+      process.stderr.write(`[DEBUG syncFileContent] Failed to sync file ${filePath}: ${error}\n`);
+      // Don't throw - syncing is best effort
+    }
+  }
+
   private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<void> {
     if (serverState.openFiles.has(filePath)) {
       process.stderr.write(`[DEBUG ensureFileOpen] File already open: ${filePath}\n`);
@@ -536,6 +585,7 @@ export class LSPClient {
       });
 
       serverState.openFiles.add(filePath);
+      serverState.fileVersions.set(filePath, 1);
       process.stderr.write(`[DEBUG ensureFileOpen] File opened successfully: ${filePath}\n`);
     } catch (error) {
       process.stderr.write(`[DEBUG ensureFileOpen] Failed to open file ${filePath}: ${error}\n`);
@@ -609,20 +659,42 @@ export class LSPClient {
     );
 
     const key = JSON.stringify(serverConfig);
-    if (!this.servers.has(key)) {
-      process.stderr.write('[DEBUG getServer] Starting new server instance\n');
-      const serverState = await this.startServer(serverConfig);
-      this.servers.set(key, serverState);
-      process.stderr.write('[DEBUG getServer] Server started and cached\n');
-    } else {
+
+    // Check if server already exists
+    if (this.servers.has(key)) {
       process.stderr.write('[DEBUG getServer] Using existing server instance\n');
+      const server = this.servers.get(key);
+      if (!server) {
+        throw new Error('Server exists in map but is undefined');
+      }
+      return server;
     }
 
-    const server = this.servers.get(key);
-    if (!server) {
-      throw new Error('Failed to get or create server');
+    // Check if server is currently starting
+    if (this.serversStarting.has(key)) {
+      process.stderr.write('[DEBUG getServer] Waiting for server startup in progress\n');
+      const startPromise = this.serversStarting.get(key);
+      if (!startPromise) {
+        throw new Error('Server start promise exists in map but is undefined');
+      }
+      return await startPromise;
     }
-    return server;
+
+    // Start new server with concurrency protection
+    process.stderr.write('[DEBUG getServer] Starting new server instance\n');
+    const startPromise = this.startServer(serverConfig);
+    this.serversStarting.set(key, startPromise);
+
+    try {
+      const serverState = await startPromise;
+      this.servers.set(key, serverState);
+      this.serversStarting.delete(key);
+      process.stderr.write('[DEBUG getServer] Server started and cached\n');
+      return serverState;
+    } catch (error) {
+      this.serversStarting.delete(key);
+      throw error;
+    }
   }
 
   async findDefinition(filePath: string, position: Position): Promise<Location[]> {
@@ -1329,10 +1401,14 @@ export class LSPClient {
         const fileContent = readFileSync(filePath, 'utf-8');
 
         // Send a no-op change notification (add and remove a space at the end)
+        // Use proper version tracking instead of timestamps
+        const version1 = (serverState.fileVersions.get(filePath) || 1) + 1;
+        serverState.fileVersions.set(filePath, version1);
+
         await this.sendNotification(serverState.process, 'textDocument/didChange', {
           textDocument: {
             uri: fileUri,
-            version: Date.now(), // Use timestamp as version
+            version: version1,
           },
           contentChanges: [
             {
@@ -1341,11 +1417,14 @@ export class LSPClient {
           ],
         });
 
-        // Immediately revert the change
+        // Immediately revert the change with next version
+        const version2 = version1 + 1;
+        serverState.fileVersions.set(filePath, version2);
+
         await this.sendNotification(serverState.process, 'textDocument/didChange', {
           textDocument: {
             uri: fileUri,
-            version: Date.now() + 1,
+            version: version2,
           },
           contentChanges: [
             {

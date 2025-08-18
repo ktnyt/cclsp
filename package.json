@@ -55,7 +55,8 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/bun": "latest",
-    "@types/node": "^24.0.1"
+    "@types/node": "^24.0.1",
+    "memfs": "^4.36.3"
   },
   "peerDependencies": {
     "typescript": "^5.8.3"

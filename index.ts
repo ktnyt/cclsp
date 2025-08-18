@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { applyWorkspaceEdit } from './src/file-editor.js';
 import { LSPClient } from './src/lsp-client.js';
 import { uriToPath } from './src/utils.js';
 
@@ -97,7 +98,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'rename_symbol',
         description:
-          'Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict.',
+          'Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -117,6 +118,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'The new name for the symbol',
             },
+            dry_run: {
+              type: 'boolean',
+              description:
+                'If true, only preview the changes without applying them (default: false)',
+            },
           },
           required: ['file_path', 'symbol_name', 'new_name'],
         },
@@ -124,7 +130,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'rename_symbol_strict',
         description:
-          'Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates.',
+          'Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -143,6 +149,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             new_name: {
               type: 'string',
               description: 'The new name for the symbol',
+            },
+            dry_run: {
+              type: 'boolean',
+              description:
+                'If true, only preview the changes without applying them (default: false)',
             },
           },
           required: ['file_path', 'line', 'character', 'new_name'],
@@ -361,11 +372,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'rename_symbol') {
-      const { file_path, symbol_name, symbol_kind, new_name } = args as {
+      const {
+        file_path,
+        symbol_name,
+        symbol_kind,
+        new_name,
+        dry_run = false,
+      } = args as {
         file_path: string;
         symbol_name: string;
         symbol_kind?: string;
         new_name: string;
+        dry_run?: boolean;
       };
       const absolutePath = resolve(file_path);
 
@@ -430,9 +448,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
           }
 
+          // Apply changes if not in dry run mode
+          if (!dry_run) {
+            const editResult = await applyWorkspaceEdit(workspaceEdit, { lspClient });
+
+            if (!editResult.success) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Failed to apply rename: ${editResult.error}`,
+                  },
+                ],
+              };
+            }
+
+            const responseText = warning
+              ? `${warning}\n\nSuccessfully renamed ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}".\n\nModified files:\n${editResult.filesModified.map((f) => `- ${f}`).join('\n')}`
+              : `Successfully renamed ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}".\n\nModified files:\n${editResult.filesModified.map((f) => `- ${f}`).join('\n')}`;
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: responseText,
+                },
+              ],
+            };
+          }
+          // Dry run mode - show preview
           const responseText = warning
-            ? `${warning}\n\nSuccessfully renamed ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}":\n${changes.join('\n')}`
-            : `Successfully renamed ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}":\n${changes.join('\n')}`;
+            ? `${warning}\n\n[DRY RUN] Would rename ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}":\n${changes.join('\n')}`
+            : `[DRY RUN] Would rename ${match.name} (${lspClient.symbolKindToString(match.kind)}) to "${new_name}":\n${changes.join('\n')}`;
 
           return {
             content: [
@@ -468,11 +515,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'rename_symbol_strict') {
-      const { file_path, line, character, new_name } = args as {
+      const {
+        file_path,
+        line,
+        character,
+        new_name,
+        dry_run = false,
+      } = args as {
         file_path: string;
         line: number;
         character: number;
         new_name: string;
+        dry_run?: boolean;
       };
       const absolutePath = resolve(file_path);
 
@@ -496,11 +550,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
           }
 
+          // Apply changes if not in dry run mode
+          if (!dry_run) {
+            const editResult = await applyWorkspaceEdit(workspaceEdit, { lspClient });
+
+            if (!editResult.success) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Failed to apply rename: ${editResult.error}`,
+                  },
+                ],
+              };
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Successfully renamed symbol at line ${line}, character ${character} to "${new_name}".\n\nModified files:\n${editResult.filesModified.map((f) => `- ${f}`).join('\n')}`,
+                },
+              ],
+            };
+          }
+          // Dry run mode - show preview
           return {
             content: [
               {
                 type: 'text',
-                text: `Successfully renamed symbol at line ${line}, character ${character} to "${new_name}":\n${changes.join('\n')}`,
+                text: `[DRY RUN] Would rename symbol at line ${line}, character ${character} to "${new_name}":\n${changes.join('\n')}`,
               },
             ],
           };
