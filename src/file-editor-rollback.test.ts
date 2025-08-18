@@ -8,6 +8,17 @@ describe('file-editor rollback without backups', () => {
   let TEST_DIR: string;
 
   beforeEach(async () => {
+    // Debug: Log environment info for CI debugging
+    if (process.env.CI) {
+      console.log('=== CI DEBUG INFO ===');
+      console.log('umask:', process.umask().toString(8));
+      console.log('cwd:', process.cwd());
+      console.log('platform:', process.platform);
+      console.log('node version:', process.version);
+      console.log('RUNNER_TEMP:', process.env.RUNNER_TEMP);
+      console.log('TEST_TMPDIR:', process.env.TEST_TMPDIR);
+    }
+
     // Generate ultra-unique directory with multiple entropy sources and retry logic
     let attempts = 0;
     const maxAttempts = 5;
