@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -9,8 +10,28 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { dirname } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
 import { uriToPath } from './utils.js';
+
+// Diagnostic helper for cross-device debugging
+function logRenameOperation(tempPath: string, targetPath: string) {
+  if (process.env.CI) {
+    try {
+      const tempMount = execSync(`stat -c '%m (%d)' "${tempPath}"`, { encoding: 'utf8' }).trim();
+      const targetMount = execSync(`stat -c '%m (%d)' "${dirname(targetPath)}"`, {
+        encoding: 'utf8',
+      }).trim();
+      console.log(`[RENAME DEBUG] temp: ${tempPath} → ${tempMount}`);
+      console.log(`[RENAME DEBUG] target: ${targetPath} → ${targetMount}`);
+      if (tempMount !== targetMount) {
+        console.warn('[RENAME DEBUG] ⚠️  Cross-device rename detected!');
+      }
+    } catch (error) {
+      console.log(`[RENAME DEBUG] Failed to check mounts: ${error}`);
+    }
+  }
+}
 
 export interface TextEdit {
   range: {
@@ -146,6 +167,9 @@ export async function applyWorkspaceEdit(
       // Write the modified content atomically to the target location
       const tempPath = `${targetPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       writeFileSync(tempPath, modifiedContent, 'utf-8');
+
+      // Diagnostic: log the rename operation to detect cross-device issues
+      logRenameOperation(tempPath, targetPath);
 
       // Atomic rename to replace the target file (not the symlink)
       try {

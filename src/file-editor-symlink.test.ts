@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { execSync } from 'node:child_process';
 import {
   existsSync,
   lstatSync,
@@ -14,6 +15,29 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
+
+// Diagnostic: Capture unhandled promise rejections to surface EXDEV errors
+if (process.env.CI) {
+  process.on('unhandledRejection', (reason: any) => {
+    console.error('[UNHANDLED REJECTION] →', reason);
+    console.error('[UNHANDLED REJECTION] Stack:', reason?.stack);
+    // Don't exit immediately to allow test to complete with proper error
+  });
+}
+
+// Diagnostic helper to prove cross-device mount issue in CI
+function logMountInfo(description: string, ...paths: string[]) {
+  if (process.env.CI) {
+    try {
+      for (const p of paths) {
+        const mountInfo = execSync(`stat -c '%m (%d)' "${p}"`, { encoding: 'utf8' }).trim();
+        console.log(`[MOUNT DEBUG] ${description} - ${p}: ${mountInfo}`);
+      }
+    } catch (error) {
+      console.log(`[MOUNT DEBUG] Failed to get mount info: ${error}`);
+    }
+  }
+}
 
 // Check if symlinks are supported in this environment
 function canCreateSymlinks(): boolean {
@@ -98,6 +122,9 @@ describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
         // Use workspace temp directory to avoid cross-device issues
         const tmpRoot = `${process.cwd()}/tmp`;
         const testDir = `${tmpRoot}/file-editor-symlink-test-${uniqueId}`;
+
+        // Diagnostic: log mount points to prove cross-device issue
+        logMountInfo('Symlink test directory setup', tmpRoot, process.cwd());
 
         // Ensure parent directory exists
         mkdirSync(tmpRoot, { recursive: true });
