@@ -23,9 +23,9 @@ describe('file-editor rollback without backups', () => {
           attempts,
         ].join('-');
 
-        TEST_DIR = process.env.RUNNER_TEMP
-          ? `${process.env.RUNNER_TEMP}/file-editor-rollback-test-${uniqueId}`
-          : `/tmp/file-editor-rollback-test-${uniqueId}`;
+        // Ensure temp operations happen on same filesystem as workspace to avoid EXDEV errors
+        const tmpRoot = process.env.TEST_TMPDIR || process.env.RUNNER_TEMP || '/tmp';
+        TEST_DIR = `${tmpRoot}/file-editor-rollback-test-${uniqueId}`;
 
         // Ensure directory doesn't exist before creating
         if (existsSync(TEST_DIR)) {
