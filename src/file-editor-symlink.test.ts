@@ -14,10 +14,6 @@ import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test`
-  : '/tmp/file-editor-symlink-test';
-
 // Check if symlinks are supported in this environment
 function canCreateSymlinks(): boolean {
   try {
@@ -38,7 +34,15 @@ function canCreateSymlinks(): boolean {
 }
 
 describe.skipIf(!canCreateSymlinks())('file-editor symlink handling', () => {
+  let TEST_DIR: string;
+
   beforeEach(() => {
+    // Generate unique directory for each test run
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}-${process.pid}`;
+    TEST_DIR = process.env.RUNNER_TEMP
+      ? `${process.env.RUNNER_TEMP}/file-editor-symlink-test-${uniqueId}`
+      : `/tmp/file-editor-symlink-test-${uniqueId}`;
+
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }

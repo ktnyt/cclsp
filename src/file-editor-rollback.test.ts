@@ -4,12 +4,16 @@ import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/file-editor-rollback-test`
-  : '/tmp/file-editor-rollback-test';
-
 describe('file-editor rollback without backups', () => {
+  let TEST_DIR: string;
+
   beforeEach(() => {
+    // Generate unique directory for each test run
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}-${process.pid}`;
+    TEST_DIR = process.env.RUNNER_TEMP
+      ? `${process.env.RUNNER_TEMP}/file-editor-rollback-test-${uniqueId}`
+      : `/tmp/file-editor-rollback-test-${uniqueId}`;
+
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
