@@ -250,11 +250,23 @@ export function generateMCPCommand(
   isUser: boolean,
   platform: NodeJS.Platform = process.platform
 ): string {
-  const absoluteConfigPath = resolve(configPath);
+  // Only resolve if it's a relative path
+  const isAbsolute =
+    configPath.startsWith('/') ||
+    configPath.startsWith('\\') ||
+    (configPath.length > 1 && configPath[1] === ':'); // Windows drive letter
+  const absoluteConfigPath = isAbsolute ? configPath : resolve(configPath);
+
   const scopeFlag = isUser ? ' --scope user' : '';
   const isWindows = platform === 'win32';
   const commandPrefix = isWindows ? 'cmd /c ' : '';
-  return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${absoluteConfigPath}`;
+
+  // Quote the path if it contains spaces
+  const quotedPath = absoluteConfigPath.includes(' ')
+    ? `"${absoluteConfigPath}"`
+    : absoluteConfigPath;
+
+  return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath}`;
 }
 
 export function buildMCPArgs(
@@ -277,8 +289,11 @@ export function buildMCPArgs(
     mcpArgs.push('--scope', 'user');
   }
 
-  // Add environment variable
-  mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${absoluteConfigPath}`);
+  // Add environment variable with proper quoting if path contains spaces
+  const quotedPath = absoluteConfigPath.includes(' ')
+    ? `"${absoluteConfigPath}"`
+    : absoluteConfigPath;
+  mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${quotedPath}`);
 
   return mcpArgs;
 }
