@@ -30,8 +30,13 @@ jobs:
     - name: Run type check
       run: bun run typecheck
 
-    - name: Run tests
+    - name: Run unit tests
       run: bun test
+
+    - name: Run execution tests
+      run: bun run test:execution
+      env:
+        CI: true
 
     - name: Build
       run: bun run build
