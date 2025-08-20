@@ -242,6 +242,89 @@ describe('setup CLI integration', () => {
   });
 });
 
+describe('Path execution tests', () => {
+  test('should handle actual file system paths', () => {
+    const testPaths = [
+      '/tmp/test project/config.json',
+      'C:\\Program Files\\My App\\config.json',
+      '/home/user/.config/claude/cclsp.json',
+      'C:\\Users\\test\\AppData\\cclsp.json',
+    ];
+
+    for (const path of testPaths) {
+      const command = generateMCPCommand(path, false);
+      const args = buildMCPArgs(path, false);
+
+      const commandQuoted = command.includes(`"${path}`);
+      const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
+      const argsQuoted = envArg ? envArg.includes('"') : false;
+
+      // All paths should now be quoted
+      expect(commandQuoted).toBe(true);
+      expect(argsQuoted).toBe(true);
+
+      // Verify the structure is valid
+      expect(command).toContain('claude mcp add cclsp');
+      expect(command).toContain('npx cclsp@latest');
+      expect(command).toContain('CCLSP_CONFIG_PATH=');
+      expect(args).toContain('mcp');
+      expect(args).toContain('add');
+      expect(args).toContain('cclsp');
+    }
+  });
+
+  test('should generate valid executable commands', () => {
+    // Test that generated commands have correct structure
+    const testPath = '/path with spaces/config.json';
+    const command = generateMCPCommand(testPath, false);
+    const args = buildMCPArgs(testPath, false);
+
+    // Command should be properly formatted
+    expect(command).toMatch(/^claude mcp add cclsp .* --env CCLSP_CONFIG_PATH=.*/);
+
+    // Args should be properly structured for spawn/exec
+    expect(args[0]).toBe('mcp');
+    expect(args[1]).toBe('add');
+    expect(args[2]).toBe('cclsp');
+
+    // Environment variable should be properly formatted
+    const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
+    expect(envArg).toBeDefined();
+    expect(envArg).toContain('=');
+
+    // If path has spaces, it should be quoted in the env value
+    if (testPath.includes(' ')) {
+      expect(envArg).toMatch(/CCLSP_CONFIG_PATH=".*"/);
+    }
+  });
+
+  test('should handle paths with spaces in command generation', () => {
+    // Test with a hypothetical path with spaces (doesn't need to exist for command generation)
+    const pathWithSpaces = '/Users/test user/My Documents/project/.claude/cclsp.json';
+
+    // Generate command and args
+    const command = generateMCPCommand(pathWithSpaces, false);
+    const args = buildMCPArgs(pathWithSpaces, false);
+
+    // The path should contain spaces
+    expect(pathWithSpaces).toContain(' ');
+
+    // Verify quoting for path with spaces in command
+    expect(command).toContain(`"${pathWithSpaces}"`);
+    expect(command).toContain('CCLSP_CONFIG_PATH=');
+
+    // Check if the env arg contains quotes
+    const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
+    expect(envArg).toBeDefined();
+    expect(envArg).toBe(`CCLSP_CONFIG_PATH="${pathWithSpaces}"`);
+
+    // Verify command structure
+    expect(command).toContain('claude mcp add cclsp');
+    expect(command).toContain('npx cclsp@latest');
+    expect(args).toEqual(expect.arrayContaining(['mcp', 'add', 'cclsp']));
+  });
+});
+
 describe('Windows platform support', () => {
   test('should generate MCP command with cmd /c prefix on Windows', () => {
     const configPath = '/path/to/config.json';
@@ -299,7 +382,7 @@ describe('Windows platform support', () => {
       'npx',
       'cclsp@latest',
       '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+      `CCLSP_CONFIG_PATH="${absoluteConfigPath}"`,
     ]);
   });
 
@@ -316,7 +399,7 @@ describe('Windows platform support', () => {
       'npx',
       'cclsp@latest',
       '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+      `CCLSP_CONFIG_PATH="${absoluteConfigPath}"`,
     ]);
 
     // Test Linux platform
@@ -328,7 +411,7 @@ describe('Windows platform support', () => {
       'npx',
       'cclsp@latest',
       '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+      `CCLSP_CONFIG_PATH="${absoluteConfigPath}"`,
     ]);
   });
 
@@ -348,7 +431,7 @@ describe('Windows platform support', () => {
       '--scope',
       'user',
       '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+      `CCLSP_CONFIG_PATH="${absoluteConfigPath}"`,
     ]);
 
     // Test macOS with user scope
@@ -362,7 +445,7 @@ describe('Windows platform support', () => {
       '--scope',
       'user',
       '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+      `CCLSP_CONFIG_PATH="${absoluteConfigPath}"`,
     ]);
   });
 
@@ -397,56 +480,41 @@ describe('Windows platform support', () => {
     }
   });
 
-  test('should quote config path with spaces in command', () => {
+  test('should always quote config path in command', () => {
     const configPathWithSpaces = '/path with spaces/config.json';
+    const configPathWithoutSpaces = '/path/to/config.json';
     const isUser = false;
 
-    // Test Windows platform with spaces
-    const windowsCommand = generateMCPCommand(configPathWithSpaces, isUser, 'win32');
-    expect(windowsCommand).toContain('CCLSP_CONFIG_PATH="/');
-    expect(windowsCommand).toContain('with spaces');
-    expect(windowsCommand).toContain('"');
+    // Test with spaces
+    const commandWithSpaces = generateMCPCommand(configPathWithSpaces, isUser, 'darwin');
+    expect(commandWithSpaces).toContain('CCLSP_CONFIG_PATH="');
+    expect(commandWithSpaces).toContain('"');
 
-    // Test macOS platform with spaces
-    const macCommand = generateMCPCommand(configPathWithSpaces, isUser, 'darwin');
-    expect(macCommand).toContain('CCLSP_CONFIG_PATH="/');
-    expect(macCommand).toContain('with spaces');
-    expect(macCommand).toContain('"');
+    // Test without spaces - should still be quoted
+    const commandWithoutSpaces = generateMCPCommand(configPathWithoutSpaces, isUser, 'darwin');
+    expect(commandWithoutSpaces).toContain('CCLSP_CONFIG_PATH="');
+    expect(commandWithoutSpaces).toContain('"');
   });
 
-  test('should quote config path with spaces in args', () => {
+  test('should always quote config path in args', () => {
     const absolutePathWithSpaces = '/absolute/path with spaces/config.json';
+    const absolutePathWithoutSpaces = '/absolute/path/to/config.json';
     const isUser = false;
 
-    // Test Windows platform with spaces
-    const windowsArgs = buildMCPArgs(absolutePathWithSpaces, isUser, 'win32');
-    const envArg = windowsArgs.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
-    expect(envArg).toBeDefined();
-    expect(envArg).toContain('"');
-    expect(envArg).toContain('with spaces');
+    // Test with spaces
+    const argsWithSpaces = buildMCPArgs(absolutePathWithSpaces, isUser, 'darwin');
+    const envArgWithSpaces = argsWithSpaces.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
+    expect(envArgWithSpaces).toBeDefined();
+    expect(envArgWithSpaces).toContain('"');
+    expect(envArgWithSpaces).toBe(`CCLSP_CONFIG_PATH="${absolutePathWithSpaces}"`);
 
-    // Test macOS platform with spaces
-    const macArgs = buildMCPArgs(absolutePathWithSpaces, isUser, 'darwin');
-    const macEnvArg = macArgs.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
-    expect(macEnvArg).toBeDefined();
-    expect(macEnvArg).toContain('"');
-    expect(macEnvArg).toContain('with spaces');
-  });
-
-  test('should not quote config path without spaces', () => {
-    const configPath = '/path/to/config.json';
-    const absolutePath = '/absolute/path/to/config.json';
-    const isUser = false;
-
-    // Test command generation
-    const command = generateMCPCommand(configPath, isUser, 'darwin');
-    expect(command).not.toContain('CCLSP_CONFIG_PATH="');
-    expect(command).toContain('CCLSP_CONFIG_PATH=/');
-
-    // Test args generation
-    const args = buildMCPArgs(absolutePath, isUser, 'darwin');
-    const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
-    expect(envArg).toBeDefined();
-    expect(envArg).not.toContain('"');
+    // Test without spaces - should still be quoted
+    const argsWithoutSpaces = buildMCPArgs(absolutePathWithoutSpaces, isUser, 'darwin');
+    const envArgWithoutSpaces = argsWithoutSpaces.find((arg) =>
+      arg.startsWith('CCLSP_CONFIG_PATH=')
+    );
+    expect(envArgWithoutSpaces).toBeDefined();
+    expect(envArgWithoutSpaces).toContain('"');
+    expect(envArgWithoutSpaces).toBe(`CCLSP_CONFIG_PATH="${absolutePathWithoutSpaces}"`);
   });
 });

@@ -261,10 +261,8 @@ export function generateMCPCommand(
   const isWindows = platform === 'win32';
   const commandPrefix = isWindows ? 'cmd /c ' : '';
 
-  // Quote the path if it contains spaces
-  const quotedPath = absoluteConfigPath.includes(' ')
-    ? `"${absoluteConfigPath}"`
-    : absoluteConfigPath;
+  // Always quote the path for safety (handles spaces and special characters)
+  const quotedPath = `"${absoluteConfigPath}"`;
 
   return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath}`;
 }
@@ -289,10 +287,8 @@ export function buildMCPArgs(
     mcpArgs.push('--scope', 'user');
   }
 
-  // Add environment variable with proper quoting if path contains spaces
-  const quotedPath = absoluteConfigPath.includes(' ')
-    ? `"${absoluteConfigPath}"`
-    : absoluteConfigPath;
+  // Always quote the path for safety (handles spaces and special characters)
+  const quotedPath = `"${absoluteConfigPath}"`;
   mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${quotedPath}`);
 
   return mcpArgs;
