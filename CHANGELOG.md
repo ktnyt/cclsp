@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2025-08-20
+
+### Enhanced
+
+- **Path Quoting**: Always quote configuration paths for improved safety
+  - Paths are now always quoted regardless of spaces
+  - Better handling of special characters in file paths
+  - Improved cross-platform compatibility
+
+### Added
+
+- **Execution Tests**: Added comprehensive command execution tests for CI
+  - Real command execution simulation with `echo`
+  - Verification that quoted paths work correctly in actual execution
+  - Integration tests for MCP command structure
+  - New test scripts: `test:execution` and `test:all`
+
+### Fixed
+
+- **Path Resolution**: Fixed absolute path detection for Windows drive letters
+  - Correctly handles paths like `C:\Program Files\...`
+  - Prevents unnecessary path resolution for already absolute paths
+
 ## [0.5.5] - 2025-08-20
 
 ### Fixed
