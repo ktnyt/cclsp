@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { LANGUAGE_SERVERS, generateConfig } from './language-servers.js';
+import { buildMCPArgs, generateMCPCommand } from './setup.js';
 
 // Type for generated config
 interface GeneratedConfig {
@@ -237,6 +238,162 @@ describe('setup CLI integration', () => {
       expect(server).toHaveProperty('command');
       expect(server).toHaveProperty('rootDir');
       expect(server.rootDir).toBe('.');
+    }
+  });
+});
+
+describe('Windows platform support', () => {
+  test('should generate MCP command with cmd /c prefix on Windows', () => {
+    const configPath = '/path/to/config.json';
+    const isUser = false;
+
+    // Test Windows platform
+    const windowsCommand = generateMCPCommand(configPath, isUser, 'win32');
+    expect(windowsCommand).toContain('cmd /c npx cclsp@latest');
+    expect(windowsCommand).toContain('CCLSP_CONFIG_PATH=');
+    expect(windowsCommand).not.toContain('--scope user');
+  });
+
+  test('should generate MCP command without cmd /c prefix on non-Windows', () => {
+    const configPath = '/path/to/config.json';
+    const isUser = false;
+
+    // Test macOS platform
+    const macCommand = generateMCPCommand(configPath, isUser, 'darwin');
+    expect(macCommand).not.toContain('cmd /c');
+    expect(macCommand).toContain('npx cclsp@latest');
+    expect(macCommand).toContain('CCLSP_CONFIG_PATH=');
+
+    // Test Linux platform
+    const linuxCommand = generateMCPCommand(configPath, isUser, 'linux');
+    expect(linuxCommand).not.toContain('cmd /c');
+    expect(linuxCommand).toContain('npx cclsp@latest');
+  });
+
+  test('should add --scope user flag when isUser is true', () => {
+    const configPath = '/path/to/config.json';
+
+    // Test with user scope on Windows
+    const windowsUserCommand = generateMCPCommand(configPath, true, 'win32');
+    expect(windowsUserCommand).toContain('--scope user');
+    expect(windowsUserCommand).toContain('cmd /c npx cclsp@latest');
+
+    // Test with user scope on macOS
+    const macUserCommand = generateMCPCommand(configPath, true, 'darwin');
+    expect(macUserCommand).toContain('--scope user');
+    expect(macUserCommand).not.toContain('cmd /c');
+  });
+
+  test('should build MCP args array with cmd /c on Windows', () => {
+    const absoluteConfigPath = '/absolute/path/to/config.json';
+    const isUser = false;
+
+    // Test Windows platform
+    const windowsArgs = buildMCPArgs(absoluteConfigPath, isUser, 'win32');
+    expect(windowsArgs).toEqual([
+      'mcp',
+      'add',
+      'cclsp',
+      'cmd',
+      '/c',
+      'npx',
+      'cclsp@latest',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+    ]);
+  });
+
+  test('should build MCP args array without cmd /c on non-Windows', () => {
+    const absoluteConfigPath = '/absolute/path/to/config.json';
+    const isUser = false;
+
+    // Test macOS platform
+    const macArgs = buildMCPArgs(absoluteConfigPath, isUser, 'darwin');
+    expect(macArgs).toEqual([
+      'mcp',
+      'add',
+      'cclsp',
+      'npx',
+      'cclsp@latest',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+    ]);
+
+    // Test Linux platform
+    const linuxArgs = buildMCPArgs(absoluteConfigPath, isUser, 'linux');
+    expect(linuxArgs).toEqual([
+      'mcp',
+      'add',
+      'cclsp',
+      'npx',
+      'cclsp@latest',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+    ]);
+  });
+
+  test('should build MCP args with user scope', () => {
+    const absoluteConfigPath = '/absolute/path/to/config.json';
+
+    // Test Windows with user scope
+    const windowsUserArgs = buildMCPArgs(absoluteConfigPath, true, 'win32');
+    expect(windowsUserArgs).toEqual([
+      'mcp',
+      'add',
+      'cclsp',
+      'cmd',
+      '/c',
+      'npx',
+      'cclsp@latest',
+      '--scope',
+      'user',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+    ]);
+
+    // Test macOS with user scope
+    const macUserArgs = buildMCPArgs(absoluteConfigPath, true, 'darwin');
+    expect(macUserArgs).toEqual([
+      'mcp',
+      'add',
+      'cclsp',
+      'npx',
+      'cclsp@latest',
+      '--scope',
+      'user',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
+    ]);
+  });
+
+  test('should handle different platforms correctly', () => {
+    const configPath = '/path/to/config.json';
+    const absoluteConfigPath = '/absolute/path/to/config.json';
+
+    // Test all common platforms
+    const platforms: NodeJS.Platform[] = [
+      'win32',
+      'darwin',
+      'linux',
+      'freebsd',
+      'openbsd',
+      'sunos',
+      'aix',
+    ];
+
+    for (const platform of platforms) {
+      const command = generateMCPCommand(configPath, false, platform);
+      const args = buildMCPArgs(absoluteConfigPath, false, platform);
+
+      if (platform === 'win32') {
+        expect(command).toContain('cmd /c');
+        expect(args).toContain('cmd');
+        expect(args).toContain('/c');
+      } else {
+        expect(command).not.toContain('cmd /c');
+        expect(args).not.toContain('cmd');
+        expect(args).not.toContain('/c');
+      }
     }
   });
 });

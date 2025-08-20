@@ -245,6 +245,44 @@ async function runCommandSilent(
   });
 }
 
+export function generateMCPCommand(
+  configPath: string,
+  isUser: boolean,
+  platform: NodeJS.Platform = process.platform
+): string {
+  const absoluteConfigPath = resolve(configPath);
+  const scopeFlag = isUser ? ' --scope user' : '';
+  const isWindows = platform === 'win32';
+  const commandPrefix = isWindows ? 'cmd /c ' : '';
+  return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${absoluteConfigPath}`;
+}
+
+export function buildMCPArgs(
+  absoluteConfigPath: string,
+  isUser: boolean,
+  platform: NodeJS.Platform = process.platform
+): string[] {
+  const mcpArgs = ['mcp', 'add', 'cclsp'];
+  const isWindows = platform === 'win32';
+
+  // Add the command with platform-specific prefix
+  if (isWindows) {
+    mcpArgs.push('cmd', '/c', 'npx', 'cclsp@latest');
+  } else {
+    mcpArgs.push('npx', 'cclsp@latest');
+  }
+
+  // Add scope flag if needed
+  if (isUser) {
+    mcpArgs.push('--scope', 'user');
+  }
+
+  // Add environment variable
+  mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${absoluteConfigPath}`);
+
+  return mcpArgs;
+}
+
 async function checkExistingCclspMCP(isUser: boolean): Promise<boolean> {
   try {
     // Check if claude command exists, otherwise use local installation
@@ -462,8 +500,7 @@ async function main() {
 
     // Show Claude MCP setup instructions
     const absoluteConfigPath = resolve(configPath);
-    const scopeFlag = isUser ? ' --scope user' : '';
-    const mcpCommand = `claude mcp add cclsp npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${absoluteConfigPath}`;
+    const mcpCommand = generateMCPCommand(configPath, isUser);
 
     console.log('\n🔗 To use cclsp with Claude Code, add it to your MCP configuration:');
     console.log(mcpCommand);
@@ -598,7 +635,8 @@ async function main() {
 
         console.log('➕ Adding cclsp to Claude MCP configuration...');
 
-        const mcpArgs = mcpCommand.split(' ').slice(1); // Remove 'claude' from the command
+        // Build the MCP add command arguments
+        const mcpArgs = buildMCPArgs(absoluteConfigPath, isUser);
         const success = await runCommand([claudeCmd, ...mcpArgs], 'cclsp MCP configuration', false);
 
         if (success) {
