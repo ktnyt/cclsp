@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2025-08-22
+
+### Fixed
+
+- **Claude CLI Fallback**: Setup script now falls back to `npx @anthropic-ai/claude-code@latest` when Claude CLI is not installed
+
+  - Automatically detects if `claude` command is available
+  - Uses npx to run Claude commands without requiring global installation
+  - Improves setup experience for users without Claude CLI installed
+
+- **MCP Command Syntax**: Fixed incorrect argument order in MCP add command
+  - Options (`--env`, `--scope`) now correctly placed before server name
+  - Resolves "unknown option '--env'" error
+  - Commands now follow proper Claude MCP CLI syntax
+
+- **Platform-specific Path Quoting**: Fixed config path quoting based on platform (#14)
+  - Windows: Paths with spaces are quoted in environment variables
+  - macOS/Linux: Paths are not quoted to avoid literal quotes in values
+  - Resolves "Config file specified in CCLSP_CONFIG_PATH does not exist" error on Unix systems
+
+### Enhanced
+
+- **Setup Robustness**: Improved error handling and fallback mechanisms
+  - Better detection of Claude CLI availability
+  - Clear messaging when falling back to npx
+  - Consistent behavior across all MCP operations (list, remove, add)
+
 ## [0.5.6] - 2025-08-20
 
 ### Enhanced

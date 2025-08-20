@@ -261,10 +261,16 @@ export function generateMCPCommand(
   const isWindows = platform === 'win32';
   const commandPrefix = isWindows ? 'cmd /c ' : '';
 
-  // Always quote the path for safety (handles spaces and special characters)
-  const quotedPath = `"${absoluteConfigPath}"`;
+  // Handle spaces in path: quote on Windows, escape on other platforms
+  const pathWithSpaces = absoluteConfigPath.includes(' ');
+  const quotedPath = pathWithSpaces
+    ? isWindows
+      ? `"${absoluteConfigPath}"`
+      : absoluteConfigPath.replace(/ /g, '\\ ')
+    : absoluteConfigPath;
 
-  return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath}`;
+  // Server name comes first, then options
+  return `claude mcp add cclsp${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath} ${commandPrefix}npx cclsp@latest`;
 }
 
 export function buildMCPArgs(
@@ -272,36 +278,51 @@ export function buildMCPArgs(
   isUser: boolean,
   platform: NodeJS.Platform = process.platform
 ): string[] {
-  const mcpArgs = ['mcp', 'add', 'cclsp'];
+  const mcpArgs = ['mcp', 'add'];
   const isWindows = platform === 'win32';
 
-  // Add the command with platform-specific prefix
-  if (isWindows) {
-    mcpArgs.push('cmd', '/c', 'npx', 'cclsp@latest');
-  } else {
-    mcpArgs.push('npx', 'cclsp@latest');
-  }
+  // Add the server name first (required positional argument)
+  mcpArgs.push('cclsp');
 
-  // Add scope flag if needed
+  // Add scope flag if needed (options come after name)
   if (isUser) {
     mcpArgs.push('--scope', 'user');
   }
 
-  // Always quote the path for safety (handles spaces and special characters)
-  const quotedPath = `"${absoluteConfigPath}"`;
+  // Add environment variable (options come after name)
+  // Handle spaces in path: quote on Windows, escape on other platforms
+  const pathWithSpaces = absoluteConfigPath.includes(' ');
+  const quotedPath = pathWithSpaces
+    ? isWindows
+      ? `"${absoluteConfigPath}"`
+      : absoluteConfigPath.replace(/ /g, '\\ ')
+    : absoluteConfigPath;
   mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${quotedPath}`);
+
+  // Add the command with platform-specific prefix
+  if (isWindows) {
+    mcpArgs.push('cmd', '/c', 'npx');
+  } else {
+    mcpArgs.push('npx');
+  }
+
+  mcpArgs.push('cclsp@latest');
 
   return mcpArgs;
 }
 
 async function checkExistingCclspMCP(isUser: boolean): Promise<boolean> {
   try {
-    // Check if claude command exists, otherwise use local installation
+    // Check if claude command exists, otherwise use npx
     const { success: claudeExists } = await runCommandSilent(['which', 'claude']);
-    const claudeCmd = claudeExists ? 'claude' : join(homedir(), '.claude', 'local', 'claude');
+    const claudeCmd = claudeExists ? 'claude' : 'npx';
+    const claudeArgs = claudeExists ? [] : ['@anthropic-ai/claude-code@latest'];
 
     const scopeFlag = isUser ? '--scope user' : '';
-    const listCommand = [claudeCmd, 'mcp', 'list'];
+    const listCommand =
+      claudeArgs.length > 0
+        ? [...[claudeCmd], ...claudeArgs, 'mcp', 'list']
+        : [claudeCmd, 'mcp', 'list'];
     if (scopeFlag) {
       listCommand.push(scopeFlag);
     }
@@ -618,12 +639,13 @@ async function main() {
       console.log('\n🔄 Configuring cclsp in Claude MCP...');
 
       try {
-        // Check if claude command exists, otherwise use local installation
+        // Check if claude command exists, otherwise use npx
         const { success: claudeExists } = await runCommandSilent(['which', 'claude']);
-        const claudeCmd = claudeExists ? 'claude' : join(homedir(), '.claude', 'local', 'claude');
+        const claudeCmd = claudeExists ? 'claude' : 'npx';
+        const claudeArgs = claudeExists ? [] : ['@anthropic-ai/claude-code@latest'];
 
         if (!claudeExists) {
-          console.log(`   Using local Claude installation at ${claudeCmd}`);
+          console.log('   Claude CLI not found, using npx @anthropic-ai/claude-code@latest');
         }
 
         // Check if cclsp already exists
@@ -634,11 +656,11 @@ async function main() {
           console.log('🗑️ Removing existing cclsp configuration...');
 
           const scopeFlag = isUser ? '--scope user' : '';
-          const removeSuccess = await runCommand(
-            [claudeCmd, 'mcp', 'remove', 'cclsp', scopeFlag].filter(Boolean),
-            'remove existing cclsp MCP',
-            false
-          );
+          const removeCommand =
+            claudeArgs.length > 0
+              ? [claudeCmd, ...claudeArgs, 'mcp', 'remove', 'cclsp', scopeFlag].filter(Boolean)
+              : [claudeCmd, 'mcp', 'remove', 'cclsp', scopeFlag].filter(Boolean);
+          const removeSuccess = await runCommand(removeCommand, 'remove existing cclsp MCP', false);
           if (!removeSuccess) {
             console.log('⚠️ Failed to remove existing cclsp configuration, continuing with add...');
           }
@@ -648,7 +670,9 @@ async function main() {
 
         // Build the MCP add command arguments
         const mcpArgs = buildMCPArgs(absoluteConfigPath, isUser);
-        const success = await runCommand([claudeCmd, ...mcpArgs], 'cclsp MCP configuration', false);
+        const fullCommand =
+          claudeArgs.length > 0 ? [claudeCmd, ...claudeArgs, ...mcpArgs] : [claudeCmd, ...mcpArgs];
+        const success = await runCommand(fullCommand, 'cclsp MCP configuration', false);
 
         if (success) {
           console.log('🎉 cclsp has been successfully added to your Claude MCP configuration!');

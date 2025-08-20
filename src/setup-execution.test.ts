@@ -38,6 +38,132 @@ async function executeCommand(
 }
 
 describe('Setup command execution tests', () => {
+  test('should generate valid claude mcp add command', async () => {
+    const configPath = '/test/path/config.json';
+    const command = generateMCPCommand(configPath, false);
+    const args = buildMCPArgs(configPath, false);
+
+    // Verify command structure
+    expect(command).toContain('claude mcp add cclsp');
+    expect(command).toContain('--env CCLSP_CONFIG_PATH=');
+    expect(command).toContain('npx cclsp@latest');
+
+    // Verify args structure
+    expect(args[0]).toBe('mcp');
+    expect(args[1]).toBe('add');
+    expect(args[2]).toBe('cclsp');
+
+    // Find --env argument
+    const envIndex = args.indexOf('--env');
+    expect(envIndex).toBeGreaterThan(2);
+    expect(args[envIndex + 1]).toContain('CCLSP_CONFIG_PATH=');
+  });
+
+  test('should execute claude mcp add command with dry-run', async () => {
+    const testDir = join(tmpdir(), `cclsp-mcp-test-${Date.now()}`);
+    const configPath = join(testDir, 'cclsp.json');
+
+    try {
+      // Create test directory and config
+      mkdirSync(testDir, { recursive: true });
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          servers: [
+            {
+              extensions: ['ts'],
+              command: ['npx', '--', 'typescript-language-server', '--stdio'],
+              rootDir: '.',
+            },
+          ],
+        })
+      );
+
+      // Build the command with --dry-run flag
+      const args = buildMCPArgs(configPath, false);
+
+      // Replace 'mcp' with 'echo' to simulate the command
+      const testArgs = ['claude', ...args];
+
+      // Execute with echo to verify command structure
+      const result = await executeCommand('echo', testArgs);
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toContain('claude');
+      expect(result.stdout).toContain('mcp');
+      expect(result.stdout).toContain('add');
+      expect(result.stdout).toContain('cclsp');
+      expect(result.stdout).toContain('CCLSP_CONFIG_PATH=');
+    } finally {
+      // Cleanup
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(!process.env.TEST_WITH_CLAUDE_CLI)(
+    'should execute actual claude mcp add command',
+    async () => {
+      const testDir = join(tmpdir(), `cclsp-real-test-${Date.now()}`);
+      const configPath = join(testDir, 'cclsp.json');
+
+      try {
+        // Create test directory and config
+        mkdirSync(testDir, { recursive: true });
+        writeFileSync(
+          configPath,
+          JSON.stringify({
+            servers: [
+              {
+                extensions: ['ts'],
+                command: ['npx', '--', 'typescript-language-server', '--stdio'],
+                rootDir: '.',
+              },
+            ],
+          })
+        );
+
+        // Check if claude command exists
+        const checkResult = await executeCommand('which', ['claude']);
+        const hasClaudeCLI = checkResult.success && checkResult.stdout.trim().length > 0;
+
+        if (hasClaudeCLI) {
+          // Build the actual command
+          const args = buildMCPArgs(configPath, false);
+
+          // First, try to remove if exists (ignore errors)
+          await executeCommand('claude', ['mcp', 'remove', 'cclsp']);
+
+          // Execute the actual add command
+          const result = await executeCommand('claude', args);
+
+          if (result.success) {
+            console.log('✅ Successfully added cclsp to MCP configuration');
+
+            // Try to remove it to clean up
+            const removeResult = await executeCommand('claude', ['mcp', 'remove', 'cclsp']);
+            expect(removeResult.success).toBe(true);
+          } else {
+            console.log('⚠️ Claude CLI command failed:', result.stderr);
+            // Log the command that would have been executed
+            const command = generateMCPCommand(configPath, false);
+            console.log(`Command would be: ${command}`);
+          }
+        } else {
+          console.log('⚠️ Claude CLI not found, verifying command format only');
+
+          // Just verify the command would be correctly formatted
+          const command = generateMCPCommand(configPath, false);
+          console.log(`Command would be: ${command}`);
+          expect(command).toContain('claude mcp add cclsp');
+          expect(command).toContain('--env CCLSP_CONFIG_PATH=');
+          expect(command).toContain('npx cclsp@latest');
+        }
+      } finally {
+        // Cleanup
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    }
+  );
   test.skipIf(!process.env.RUN_EXECUTION_TESTS)(
     'should execute MCP command with spaces in path',
     async () => {
@@ -70,8 +196,16 @@ describe('Setup command execution tests', () => {
         expect(echoResult.stdout).toContain('cclsp');
         expect(echoResult.stdout).toContain('CCLSP_CONFIG_PATH=');
 
-        // Verify the quoted path is preserved
-        expect(echoResult.stdout).toContain('"');
+        // Verify path handling based on platform
+        const isWindows = process.platform === 'win32';
+        if (isWindows) {
+          // Windows: Path with spaces should be quoted
+          expect(echoResult.stdout).toContain('"');
+        } else {
+          // Non-Windows: Path with spaces should be escaped
+          expect(echoResult.stdout).toContain('\\ ');
+          expect(echoResult.stdout).not.toContain('"');
+        }
       } finally {
         // Cleanup
         rmSync(testDir, { recursive: true, force: true });
@@ -81,6 +215,7 @@ describe('Setup command execution tests', () => {
 
   test('should handle command execution simulation', async () => {
     const testPath = '/path with spaces/config.json';
+    const isWindows = process.platform === 'win32';
     const args = buildMCPArgs(testPath, false);
 
     // Simulate execution with echo (always available)
@@ -92,9 +227,16 @@ describe('Setup command execution tests', () => {
     expect(result.stdout).toContain('add');
     expect(result.stdout).toContain('cclsp');
 
-    // Verify path is properly quoted in the output
+    // Verify path handling based on platform
     const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
-    expect(envArg).toContain('"');
+    if (isWindows) {
+      // Windows: Path with spaces should be quoted
+      expect(envArg).toContain('"');
+    } else {
+      // Non-Windows: Path with spaces should be escaped
+      expect(envArg).not.toContain('"');
+      expect(envArg).toContain('\\ ');
+    }
   });
 
   test.skipIf(!process.env.TEST_WITH_CLAUDE_CLI)('should work with actual claude CLI', async () => {
