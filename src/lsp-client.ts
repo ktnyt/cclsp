@@ -190,7 +190,14 @@ export class LSPClient {
     });
 
     // Initialize the server
-    const initResult = await this.sendRequest(childProcess, 'initialize', {
+    const initializeParams: {
+      processId: number | null;
+      clientInfo: { name: string; version: string };
+      capabilities: unknown;
+      rootUri: string;
+      workspaceFolders: Array<{ uri: string; name: string }>;
+      initializationOptions?: unknown;
+    } = {
       processId: childProcess.pid || null,
       clientInfo: { name: 'cclsp', version: '0.1.0' },
       capabilities: {
@@ -241,26 +248,14 @@ export class LSPClient {
           name: 'workspace',
         },
       ],
-      initializationOptions: {
-        settings: {
-          pylsp: {
-            plugins: {
-              jedi_completion: { enabled: true },
-              jedi_definition: { enabled: true },
-              jedi_hover: { enabled: true },
-              jedi_references: { enabled: true },
-              jedi_signature_help: { enabled: true },
-              jedi_symbols: { enabled: true },
-              pylint: { enabled: false },
-              pycodestyle: { enabled: false },
-              pyflakes: { enabled: false },
-              yapf: { enabled: false },
-              rope_completion: { enabled: false },
-            },
-          },
-        },
-      },
-    });
+    };
+
+    // Only include initializationOptions if they are defined
+    if (serverConfig.initializationOptions !== undefined) {
+      initializeParams.initializationOptions = serverConfig.initializationOptions;
+    }
+
+    const initResult = await this.sendRequest(childProcess, 'initialize', initializeParams);
 
     // Send the initialized notification after receiving the initialize response
     await this.sendNotification(childProcess, 'initialized', {});

@@ -8,6 +8,7 @@ export interface LanguageServerConfig {
   description?: string;
   installRequired?: boolean;
   restartInterval?: number; // Default restart interval in minutes
+  initializationOptions?: unknown; // Default LSP initialization options
 }
 
 export const LANGUAGE_SERVERS: LanguageServerConfig[] = [
@@ -29,6 +30,25 @@ export const LANGUAGE_SERVERS: LanguageServerConfig[] = [
     description: 'Python Language Server Protocol implementation',
     installRequired: false,
     restartInterval: 5, // Auto-restart every 5 minutes to prevent performance degradation
+    initializationOptions: {
+      settings: {
+        pylsp: {
+          plugins: {
+            jedi_completion: { enabled: true },
+            jedi_definition: { enabled: true },
+            jedi_hover: { enabled: true },
+            jedi_references: { enabled: true },
+            jedi_signature_help: { enabled: true },
+            jedi_symbols: { enabled: true },
+            pylint: { enabled: false },
+            pycodestyle: { enabled: false },
+            pyflakes: { enabled: false },
+            yapf: { enabled: false },
+            rope_completion: { enabled: false },
+          },
+        },
+      },
+    },
   },
   {
     name: 'go',
@@ -179,6 +199,7 @@ export function generateConfig(selectedLanguages: string[]): object {
         command: string[];
         rootDir: string;
         restartInterval?: number;
+        initializationOptions?: unknown;
       } = {
         extensions: server.extensions,
         command: server.command,
@@ -188,6 +209,11 @@ export function generateConfig(selectedLanguages: string[]): object {
       // Add restartInterval if specified for the server
       if (server.restartInterval) {
         config.restartInterval = server.restartInterval;
+      }
+
+      // Add initializationOptions if specified for the server
+      if (server.initializationOptions) {
+        config.initializationOptions = server.initializationOptions;
       }
 
       return config;
