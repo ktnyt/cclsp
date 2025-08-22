@@ -269,8 +269,8 @@ export function generateMCPCommand(
       : absoluteConfigPath.replace(/ /g, '\\ ')
     : absoluteConfigPath;
 
-  // Server name comes first, then options
-  return `claude mcp add cclsp${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath} ${commandPrefix}npx cclsp@latest`;
+  // Server name, then command, then options
+  return `claude mcp add cclsp ${commandPrefix}npx cclsp@latest${scopeFlag} --env CCLSP_CONFIG_PATH=${quotedPath}`;
 }
 
 export function buildMCPArgs(
@@ -281,15 +281,22 @@ export function buildMCPArgs(
   const mcpArgs = ['mcp', 'add'];
   const isWindows = platform === 'win32';
 
-  // Add the server name first (required positional argument)
+  // Add the server name first
   mcpArgs.push('cclsp');
 
-  // Add scope flag if needed (options come after name)
+  // Add the command second
+  if (isWindows) {
+    mcpArgs.push('cmd');
+  } else {
+    mcpArgs.push('npx');
+  }
+
+  // Add options last
   if (isUser) {
     mcpArgs.push('--scope', 'user');
   }
 
-  // Add environment variable (options come after name)
+  // Add environment variable
   // Handle spaces in path: quote on Windows, escape on other platforms
   const pathWithSpaces = absoluteConfigPath.includes(' ');
   const quotedPath = pathWithSpaces
@@ -299,14 +306,12 @@ export function buildMCPArgs(
     : absoluteConfigPath;
   mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${quotedPath}`);
 
-  // Add the command with platform-specific prefix
+  // Add remaining command args
   if (isWindows) {
-    mcpArgs.push('cmd', '/c', 'npx');
+    mcpArgs.push('/c', 'npx', 'cclsp@latest');
   } else {
-    mcpArgs.push('npx');
+    mcpArgs.push('cclsp@latest');
   }
-
-  mcpArgs.push('cclsp@latest');
 
   return mcpArgs;
 }
@@ -612,7 +617,9 @@ async function main() {
           {
             type: 'confirm',
             name: 'shouldInstall',
-            message: `Do you want to install LSPs now? (${installableServers.map((s) => s.displayName).join(', ')})`,
+            message: `Do you want to install LSPs now? (${installableServers
+              .map((s) => s.displayName)
+              .join(', ')})`,
             default: false,
           },
         ]);

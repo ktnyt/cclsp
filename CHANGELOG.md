@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2025-08-22
+
+### Fixed
+
+- **MCP Command Argument Order**: Fixed `claude mcp add` command argument order
+  - Corrected to: `claude mcp add cclsp <command> [args...] --env <env>`
+  - Server name and command are now properly positioned as positional arguments
+  - Options are placed after the command as required by the CLI
+  - Resolves "missing required argument 'commandOrUrl'" error
+
+- **Path Escaping on Non-Windows Platforms**: Fixed path handling for spaces
+  - Windows: Continues to use quotes for paths with spaces
+  - macOS/Linux: Now escapes spaces with backslashes instead of quotes
+  - Ensures proper path handling across all platforms
+
 ## [0.5.7] - 2025-08-22
 
 ### Fixed

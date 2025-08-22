@@ -302,18 +302,22 @@ describe('Path execution tests', () => {
 
     // Command should be properly formatted based on platform
     if (isWindows) {
-      expect(command).toMatch(/^claude mcp add cclsp .* cmd \/c npx cclsp@latest$/);
+      expect(command).toContain('claude mcp add cclsp cmd /c npx cclsp@latest');
+      expect(command).toContain('--env CCLSP_CONFIG_PATH=');
     } else {
-      expect(command).toMatch(/^claude mcp add cclsp .* npx cclsp@latest$/);
+      expect(command).toContain('claude mcp add cclsp npx cclsp@latest');
+      expect(command).toContain('--env CCLSP_CONFIG_PATH=');
     }
 
     // Args should be properly structured for spawn/exec
     expect(args[0]).toBe('mcp');
     expect(args[1]).toBe('add');
-    // Name comes first after 'mcp add'
     expect(args[2]).toBe('cclsp');
-    const cclspIndex = args.indexOf('cclsp');
-    expect(cclspIndex).toBe(2);
+    // Command comes after name
+    expect(args[3]).toBe(isWindows ? 'cmd' : 'npx');
+    // --env should come after command
+    const envIndex = args.indexOf('--env');
+    expect(envIndex).toBeGreaterThan(3);
 
     // Environment variable should be properly formatted
     const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
@@ -423,9 +427,9 @@ describe('Windows platform support', () => {
       'mcp',
       'add',
       'cclsp',
+      'cmd',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'cmd',
       '/c',
       'npx',
       'cclsp@latest',
@@ -442,9 +446,9 @@ describe('Windows platform support', () => {
       'mcp',
       'add',
       'cclsp',
+      'npx',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'npx',
       'cclsp@latest',
     ]);
 
@@ -454,9 +458,9 @@ describe('Windows platform support', () => {
       'mcp',
       'add',
       'cclsp',
+      'npx',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'npx',
       'cclsp@latest',
     ]);
   });
@@ -470,11 +474,11 @@ describe('Windows platform support', () => {
       'mcp',
       'add',
       'cclsp',
+      'cmd',
       '--scope',
       'user',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'cmd',
       '/c',
       'npx',
       'cclsp@latest',
@@ -486,11 +490,11 @@ describe('Windows platform support', () => {
       'mcp',
       'add',
       'cclsp',
+      'npx',
       '--scope',
       'user',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'npx',
       'cclsp@latest',
     ]);
   });
