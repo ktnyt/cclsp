@@ -284,14 +284,14 @@ export function buildMCPArgs(
   // Add the server name first
   mcpArgs.push('cclsp');
 
-  // Add the command second
+  // Add the full command and its arguments
   if (isWindows) {
-    mcpArgs.push('cmd');
+    mcpArgs.push('cmd', '/c', 'npx', 'cclsp@latest');
   } else {
-    mcpArgs.push('npx');
+    mcpArgs.push('npx', 'cclsp@latest');
   }
 
-  // Add options last
+  // Add options after the command
   if (isUser) {
     mcpArgs.push('--scope', 'user');
   }
@@ -305,13 +305,6 @@ export function buildMCPArgs(
       : absoluteConfigPath.replace(/ /g, '\\ ')
     : absoluteConfigPath;
   mcpArgs.push('--env', `CCLSP_CONFIG_PATH=${quotedPath}`);
-
-  // Add remaining command args
-  if (isWindows) {
-    mcpArgs.push('/c', 'npx', 'cclsp@latest');
-  } else {
-    mcpArgs.push('cclsp@latest');
-  }
 
   return mcpArgs;
 }

@@ -428,11 +428,11 @@ describe('Windows platform support', () => {
       'add',
       'cclsp',
       'cmd',
-      '--env',
-      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
       '/c',
       'npx',
       'cclsp@latest',
+      '--env',
+      `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
     ]);
   });
 
@@ -447,9 +447,9 @@ describe('Windows platform support', () => {
       'add',
       'cclsp',
       'npx',
+      'cclsp@latest',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'cclsp@latest',
     ]);
 
     // Test Linux platform (no quotes)
@@ -459,9 +459,9 @@ describe('Windows platform support', () => {
       'add',
       'cclsp',
       'npx',
+      'cclsp@latest',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'cclsp@latest',
     ]);
   });
 
@@ -475,13 +475,13 @@ describe('Windows platform support', () => {
       'add',
       'cclsp',
       'cmd',
+      '/c',
+      'npx',
+      'cclsp@latest',
       '--scope',
       'user',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      '/c',
-      'npx',
-      'cclsp@latest',
     ]);
 
     // Test macOS with user scope (no quotes)
@@ -491,11 +491,11 @@ describe('Windows platform support', () => {
       'add',
       'cclsp',
       'npx',
+      'cclsp@latest',
       '--scope',
       'user',
       '--env',
       `CCLSP_CONFIG_PATH=${absoluteConfigPath}`,
-      'cclsp@latest',
     ]);
   });
 
