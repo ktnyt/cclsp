@@ -262,7 +262,24 @@ Alternatively, create an `cclsp.json` configuration file manually:
     {
       "extensions": ["py", "pyi"],
       "command": ["uvx", "--from", "python-lsp-server", "pylsp"],
-      "rootDir": "."
+      "rootDir": ".",
+      "initializationOptions": {
+        "settings": {
+          "pylsp": {
+            "plugins": {
+              "jedi_completion": { "enabled": true },
+              "jedi_definition": { "enabled": true },
+              "jedi_hover": { "enabled": true },
+              "jedi_references": { "enabled": true },
+              "jedi_signature_help": { "enabled": true },
+              "jedi_symbols": { "enabled": true },
+              "pylint": { "enabled": false },
+              "pycodestyle": { "enabled": false },
+              "pyflakes": { "enabled": false }
+            }
+          }
+        }
+      }
     },
     {
       "extensions": ["js", "ts", "jsx", "tsx"],
@@ -272,6 +289,16 @@ Alternatively, create an `cclsp.json` configuration file manually:
   ]
 }
 ```
+
+**Configuration Options:**
+
+- `extensions`: Array of file extensions this server handles
+- `command`: Command array to spawn the LSP server
+- `rootDir`: Working directory for the LSP server (optional, defaults to ".")
+- `restartInterval`: Auto-restart interval in minutes (optional)
+- `initializationOptions`: LSP server initialization options (optional)
+
+The `initializationOptions` field allows you to customize how each LSP server initializes. This is particularly useful for servers like `pylsp` (Python) that have extensive plugin configurations, or servers like `devsense-php-ls` that require specific settings.
 
 <details>
 <summary>📋 More Language Server Examples</summary>

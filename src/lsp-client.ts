@@ -53,6 +53,10 @@ export class LSPClient {
     { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }
   > = new Map();
 
+  private isPylspServer(serverConfig: LSPServerConfig): boolean {
+    return serverConfig.command.some((cmd) => cmd.includes('pylsp'));
+  }
+
   constructor(configPath?: string) {
     // First try to load from environment variable (MCP config)
     if (process.env.CCLSP_CONFIG_PATH) {
@@ -190,7 +194,14 @@ export class LSPClient {
     });
 
     // Initialize the server
-    const initResult = await this.sendRequest(childProcess, 'initialize', {
+    const initializeParams: {
+      processId: number | null;
+      clientInfo: { name: string; version: string };
+      capabilities: unknown;
+      rootUri: string;
+      workspaceFolders: Array<{ uri: string; name: string }>;
+      initializationOptions?: unknown;
+    } = {
       processId: childProcess.pid || null,
       clientInfo: { name: 'cclsp', version: '0.1.0' },
       capabilities: {
@@ -241,7 +252,14 @@ export class LSPClient {
           name: 'workspace',
         },
       ],
-      initializationOptions: {
+    };
+
+    // Handle initializationOptions with backwards compatibility for pylsp
+    if (serverConfig.initializationOptions !== undefined) {
+      initializeParams.initializationOptions = serverConfig.initializationOptions;
+    } else if (this.isPylspServer(serverConfig)) {
+      // Backwards compatibility: provide default pylsp settings when none are specified
+      initializeParams.initializationOptions = {
         settings: {
           pylsp: {
             plugins: {
@@ -259,8 +277,10 @@ export class LSPClient {
             },
           },
         },
-      },
-    });
+      };
+    }
+
+    const initResult = await this.sendRequest(childProcess, 'initialize', initializeParams);
 
     // Send the initialized notification after receiving the initialize response
     await this.sendNotification(childProcess, 'initialized', {});
