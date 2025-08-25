@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12] - 2025-08-25
+
+### Added
+
+- **InitializationOptions Support**: Added support for passing LSP server initialization options (#15 by @colinmollenhour)
+  - New `initializationOptions` field in server configuration for LSP-specific settings
+  - Enables passing settings like `pylsp.plugins.pycodestyle.enabled` for Python Language Server
+  - Improves LSP server compatibility with servers requiring specific initialization configuration
+
+### Fixed
+
+- **MCP Command Execution**: Fixed argument order and escaping for Claude CLI integration
+  - Corrected command argument ordering for proper MCP server registration
+  - Fixed path escaping issues with spaces in configuration paths
+  - Improved cross-platform compatibility for Windows, macOS, and Linux
+
 ## [0.5.10] - 2025-08-22
 
 ### Fixed
