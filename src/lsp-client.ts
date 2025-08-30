@@ -628,6 +628,8 @@ export class LSPClient {
       h: 'c',
       hpp: 'cpp',
       java: 'java',
+      jar: 'java', // JAR files contain Java bytecode
+      class: 'java', // Java class files
       cs: 'csharp',
       php: 'php',
       rb: 'ruby',
