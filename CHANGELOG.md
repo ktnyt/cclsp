@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-10-06
+
+### Added
+
+- **Server Adapter System**: Internal adapter pattern for LSP servers with non-standard behavior
+  - **Vue Language Server Adapter**: Handles custom `tsserver/request` protocol
+    - Responds to `_vue:projectInfo` requests to unblock server operations
+    - Extended timeouts: 60s for documentSymbol, 45s for definition/references/rename
+    - Auto-detected when command contains `vue-language-server` or `@vue/language-server`
+  - **Pyright Adapter**: Extended timeouts for large Python projects
+    - 45-60s timeouts for operations that analyze many files
+    - Auto-detected when command contains `pyright` or `basedpyright`
+  - Zero configuration required - adapters automatically detected based on server command
+  - Internal use only (not user-extensible) to maintain stability and security
+  - Comprehensive test coverage with 34 new tests
+
+### Fixed
+
+- **Vue Language Server Timeout**: Fixed timeout errors with vue-language-server (#18)
+  - Custom protocol handler prevents 30-second timeout on `textDocument/documentSymbol`
+  - Improved compatibility with Vue 3 projects using TypeScript
+
 ## [0.5.13] - 2025-08-30
 
 ### Added
