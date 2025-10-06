@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { constants, access, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
+import { adapterRegistry } from './lsp/adapters/registry.js';
 import type {
   Config,
   Diagnostic,
@@ -41,6 +42,7 @@ interface ServerState {
   diagnostics: Map<string, Diagnostic[]>; // Store diagnostics by file URI
   lastDiagnosticUpdate: Map<string, number>; // Track last update time per file
   diagnosticVersions: Map<string, number>; // Track diagnostic versions per file
+  adapter?: import('./lsp/adapters/types.js').ServerAdapter; // Optional adapter for server-specific behavior
 }
 
 export class LSPClient {
@@ -139,6 +141,14 @@ export class LSPClient {
       initializationResolve = resolve;
     });
 
+    // Auto-detect adapter for this server
+    const adapter = adapterRegistry.getAdapter(serverConfig);
+    if (adapter) {
+      process.stderr.write(
+        `Using adapter "${adapter.name}" for server: ${serverConfig.command.join(' ')}\n`
+      );
+    }
+
     const serverState: ServerState = {
       process: childProcess,
       initialized: false,
@@ -151,6 +161,7 @@ export class LSPClient {
       diagnostics: new Map(),
       lastDiagnosticUpdate: new Map(),
       diagnosticVersions: new Map(),
+      adapter, // Store adapter for later use
     };
 
     // Store the resolve function to call when initialized notification is received
@@ -326,8 +337,40 @@ export class LSPClient {
       }
     }
 
-    // Handle notifications from server
+    // Handle notifications and requests from server
     if (message.method && serverState) {
+      const { adapter } = serverState;
+
+      // Try adapter-specific handlers first for custom requests
+      if (message.id && adapter?.handleRequest) {
+        adapter
+          .handleRequest(message.method, message.params, serverState)
+          .then((result) => {
+            // Send response back to server
+            this.sendMessage(serverState.process, {
+              jsonrpc: '2.0',
+              id: message.id,
+              result,
+            });
+          })
+          .catch((error) => {
+            // Adapter didn't handle it, fall through to standard handling
+            process.stderr.write(
+              `[DEBUG handleMessage] Adapter did not handle request: ${message.method} - ${error}\n`
+            );
+          });
+        return;
+      }
+
+      // Try adapter-specific notification handlers
+      if (!message.id && adapter?.handleNotification) {
+        const handled = adapter.handleNotification(message.method, message.params, serverState);
+        if (handled) {
+          return;
+        }
+      }
+
+      // Standard LSP message handling
       if (message.method === 'initialized') {
         process.stderr.write(
           '[DEBUG handleMessage] Received initialized notification from server\n'
@@ -733,10 +776,17 @@ export class LSPClient {
     await this.ensureFileOpen(serverState, filePath);
 
     process.stderr.write('[DEBUG findDefinition] Sending textDocument/definition request\n');
-    const result = await this.sendRequest(serverState.process, 'textDocument/definition', {
-      textDocument: { uri: pathToUri(filePath) },
-      position,
-    });
+    const method = 'textDocument/definition';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+      },
+      timeout
+    );
 
     process.stderr.write(
       `[DEBUG findDefinition] Result type: ${typeof result}, isArray: ${Array.isArray(result)}\n`
@@ -790,11 +840,18 @@ export class LSPClient {
       `[DEBUG] findReferences for ${filePath} at ${position.line}:${position.character}, includeDeclaration: ${includeDeclaration}\n`
     );
 
-    const result = await this.sendRequest(serverState.process, 'textDocument/references', {
-      textDocument: { uri: pathToUri(filePath) },
-      position,
-      context: { includeDeclaration },
-    });
+    const method = 'textDocument/references';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+        context: { includeDeclaration },
+      },
+      timeout
+    );
 
     process.stderr.write(
       `[DEBUG] findReferences result type: ${typeof result}, isArray: ${Array.isArray(result)}, length: ${Array.isArray(result) ? result.length : 'N/A'}\n`
@@ -840,11 +897,18 @@ export class LSPClient {
     await this.ensureFileOpen(serverState, filePath);
 
     process.stderr.write('[DEBUG renameSymbol] Sending textDocument/rename request\n');
-    const result = await this.sendRequest(serverState.process, 'textDocument/rename', {
-      textDocument: { uri: pathToUri(filePath) },
-      position,
-      newName,
-    });
+    const method = 'textDocument/rename';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+        newName,
+      },
+      timeout
+    );
 
     process.stderr.write(
       `[DEBUG renameSymbol] Result type: ${typeof result}, hasChanges: ${result && typeof result === 'object' && 'changes' in result}, hasDocumentChanges: ${result && typeof result === 'object' && 'documentChanges' in result}\n`
@@ -922,9 +986,18 @@ export class LSPClient {
 
     process.stderr.write(`[DEBUG] Requesting documentSymbol for: ${filePath}\n`);
 
-    const result = await this.sendRequest(serverState.process, 'textDocument/documentSymbol', {
-      textDocument: { uri: pathToUri(filePath) },
-    });
+    // Get custom timeout from adapter if available
+    const method = 'textDocument/documentSymbol';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+      },
+      timeout
+    );
 
     process.stderr.write(
       `[DEBUG] documentSymbol result type: ${typeof result}, isArray: ${Array.isArray(result)}, length: ${Array.isArray(result) ? result.length : 'N/A'}\n`

@@ -55,6 +55,15 @@ npm run prepublishOnly  # build + test + typecheck
 - Handles LSP protocol communication (JSON-RPC over stdio)
 - Maps file extensions to appropriate language servers
 - Maintains process lifecycle and request/response correlation
+- Auto-detects and applies server-specific adapters
+
+**Server Adapter System** (`src/lsp/adapters/`)
+
+- Built-in adapters for LSP servers with non-standard behavior
+- Vue Language Server adapter handles custom `tsserver/request` protocol
+- Pyright adapter provides extended timeouts for large projects
+- Automatically detected based on server command (no configuration needed)
+- Internal use only - not user-extensible
 
 **Configuration System** (`cclsp.json` or via `CCLSP_CONFIG_PATH`)
 
@@ -157,3 +166,26 @@ The implementation handles LSP protocol specifics:
 - Preloading of servers for detected file types
 - Automatic server restart based on configured intervals
 - Manual server restart via MCP tool
+- Server-specific adapters for non-standard protocol extensions
+
+### Server Adapters
+
+Some LSP servers deviate from the standard protocol or have special requirements. cclsp includes built-in adapters to handle these cases automatically:
+
+#### Vue Language Server Adapter
+
+The Vue Language Server uses a non-standard `tsserver/request` protocol for TypeScript integration. The adapter:
+
+- Handles `tsserver/request` notifications from the server
+- Responds with minimal project information to unblock the server
+- Extends timeouts for operations requiring TypeScript analysis (60s for documentSymbol, 45s for definition/references/rename)
+- Automatically detected when command contains `vue-language-server` or `@vue/language-server`
+
+#### Pyright Adapter
+
+Pyright can be slow on large Python projects. The adapter:
+
+- Extends timeouts for operations that may analyze many files (45-60s)
+- Automatically detected when command contains `pyright` or `basedpyright`
+
+**Note**: Adapters are internal to cclsp and not user-extensible. They are automatically selected based on the server command - no configuration needed.
