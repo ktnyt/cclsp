@@ -390,11 +390,11 @@ Find the definition of a symbol by name and kind in a file. Returns definitions 
 
 ### `find_references`
 
-Find all references to a symbol by name and kind in a file. Returns references for all matching symbols.
+Find all references to a symbol across the entire workspace. Returns references for all matching symbols.
 
 **Parameters:**
 
-- `file_path`: The path to the file
+- `file_path`: The path to the file where the symbol is defined
 - `symbol_name`: The name of the symbol
 - `symbol_kind`: The kind of symbol (function, class, variable, method, etc.) (optional)
 - `include_declaration`: Whether to include the declaration (optional, default: true)
