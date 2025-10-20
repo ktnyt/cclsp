@@ -70,13 +70,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'find_references',
         description:
-          'Find all references to a symbol by name and kind in a file. Returns references for all matching symbols.',
+          'Find all references to a symbol across the entire workspace. Returns references for all matching symbols.',
         inputSchema: {
           type: 'object',
           properties: {
             file_path: {
               type: 'string',
-              description: 'The path to the file',
+              description: 'The path to the file where the symbol is defined',
             },
             symbol_name: {
               type: 'string',
