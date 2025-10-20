@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2025-10-20
+
+### Enhanced
+
+- **find_references Tool Documentation**: Clarified tool descriptions and parameters
+  - Updated `find_references` description to emphasize workspace-wide search capability
+  - Clarified `file_path` parameter to indicate it's where the symbol is defined
+  - Improved accuracy of MCP tool documentation
+
 ## [0.6.0] - 2025-10-06
 
 ### Added
@@ -57,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **MCP Command Argument Order**: Fixed `claude mcp add` command argument order
+
   - Corrected to: `claude mcp add cclsp <command> [args...] --env <env>`
   - Server name and command are now properly positioned as positional arguments
   - Options are placed after the command as required by the CLI
@@ -78,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves setup experience for users without Claude CLI installed
 
 - **MCP Command Syntax**: Fixed incorrect argument order in MCP add command
+
   - Options (`--env`, `--scope`) now correctly placed before server name
   - Resolves "unknown option '--env'" error
   - Commands now follow proper Claude MCP CLI syntax
@@ -426,6 +437,7 @@ Your contributions help make cclsp better for everyone! 🙏
 - Test suite with Bun
 - Documentation for setup and usage
 
+[0.6.1]: https://github.com/ktnyt/cclsp/compare/v0.6.0...v0.6.1
 [0.2.1]: https://github.com/ktnyt/cclsp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ktnyt/cclsp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ktnyt/cclsp/releases/tag/v0.1.0
