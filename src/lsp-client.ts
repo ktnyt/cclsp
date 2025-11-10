@@ -115,12 +115,55 @@ export class LSPClient {
       `Available servers: ${this.config.servers.map((s) => s.extensions.join(',')).join(' | ')}\n`
     );
 
-    const server = this.config.servers.find((server) => server.extensions.includes(extension));
+    // Find all servers that support this extension
+    const matchingServers = this.config.servers.filter((server) =>
+      server.extensions.includes(extension)
+    );
+
+    if (matchingServers.length === 0) {
+      process.stderr.write(`No server found for extension: ${extension}\n`);
+      return null;
+    }
+
+    // If only one server matches, use it
+    if (matchingServers.length === 1) {
+      const server = matchingServers[0];
+      if (server) {
+        process.stderr.write(`Found server for ${extension}: ${server.command.join(' ')}\n`);
+      }
+      return server || null;
+    }
+
+    // Multiple servers match - pick the one with most specific rootDir
+    const absoluteFilePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath);
+    let bestMatch: LSPServerConfig | null = null;
+    let longestRootLength = -1;
+
+    for (const server of matchingServers) {
+      const rootDir = server.rootDir
+        ? server.rootDir.startsWith('/')
+          ? server.rootDir
+          : join(process.cwd(), server.rootDir)
+        : process.cwd();
+
+      const rel = relative(rootDir, absoluteFilePath);
+
+      // File is inside rootDir if relative path doesn't escape with '..'
+      if (!rel.startsWith('..') && !rel.startsWith('/')) {
+        if (rootDir.length > longestRootLength) {
+          longestRootLength = rootDir.length;
+          bestMatch = server;
+        }
+      }
+    }
+
+    // Fallback to first match if no rootDir contains the file
+    const server = bestMatch || matchingServers[0];
 
     if (server) {
-      process.stderr.write(`Found server for ${extension}: ${server.command.join(' ')}\n`);
-    } else {
-      process.stderr.write(`No server found for extension: ${extension}\n`);
+      process.stderr.write(
+        `Found server for ${extension}: ${server.command.join(' ')} (rootDir: ${server.rootDir || '.'})\n`
+      );
     }
 
     return server || null;
