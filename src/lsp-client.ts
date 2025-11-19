@@ -135,11 +135,12 @@ export class LSPClient {
     }
 
     // Multiple servers match - pick the one with most specific rootDir
-    const absoluteFilePath = normalize(
-      filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
-    );
+    // Check if filePath is already absolute (Unix: /, Windows: C:\ or UNC paths)
+    const isAbsolutePath =
+      filePath.startsWith('/') || filePath.startsWith('\\') || /^[a-zA-Z]:/.test(filePath);
+    const absoluteFilePath = normalize(isAbsolutePath ? filePath : join(process.cwd(), filePath));
     process.stderr.write(
-      `[DEBUG getServerForFile] filePath: ${filePath}\n[DEBUG getServerForFile] absoluteFilePath: ${absoluteFilePath}\n`
+      `[DEBUG getServerForFile] filePath: ${filePath}\n[DEBUG getServerForFile] isAbsolutePath: ${isAbsolutePath}\n[DEBUG getServerForFile] absoluteFilePath: ${absoluteFilePath}\n`
     );
     let bestMatch: LSPServerConfig | null = null;
     let longestRootLength = -1;
