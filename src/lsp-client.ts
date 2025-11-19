@@ -138,6 +138,9 @@ export class LSPClient {
     const absoluteFilePath = normalize(
       filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
     );
+    process.stderr.write(
+      `[DEBUG getServerForFile] filePath: ${filePath}\n[DEBUG getServerForFile] absoluteFilePath: ${absoluteFilePath}\n`
+    );
     let bestMatch: LSPServerConfig | null = null;
     let longestRootLength = -1;
 
@@ -152,13 +155,21 @@ export class LSPClient {
       );
 
       const rel = relative(rootDir, absoluteFilePath);
+      const isInside = !rel.startsWith('..');
+
+      process.stderr.write(
+        `[DEBUG getServerForFile] Server: ${server.command[0]}, rootDir: ${rootDir}, rel: ${rel}, isInside: ${isInside}, rootDirLen: ${rootDir.length}\n`
+      );
 
       // File is inside rootDir if relative path doesn't escape with '..'
       // Works on both Unix and Windows (normalize handles path separators)
-      if (!rel.startsWith('..')) {
+      if (isInside) {
         if (rootDir.length > longestRootLength) {
           longestRootLength = rootDir.length;
           bestMatch = server;
+          process.stderr.write(
+            `[DEBUG getServerForFile] New best match: ${server.command[0]} (length: ${rootDir.length})\n`
+          );
         }
       }
     }
