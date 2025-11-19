@@ -142,12 +142,13 @@ export class LSPClient {
     let longestRootLength = -1;
 
     for (const server of matchingServers) {
+      // Normalize rootDir to use platform-specific separators
+      // rootDir might be stored with '/' separators even on Windows
+      const normalizedServerRoot = server.rootDir ? normalize(server.rootDir) : '.';
+      const isAbsolute =
+        normalizedServerRoot.startsWith('/') || /^[a-zA-Z]:/.test(normalizedServerRoot);
       const rootDir = normalize(
-        server.rootDir
-          ? server.rootDir.startsWith('/')
-            ? server.rootDir
-            : join(process.cwd(), server.rootDir)
-          : process.cwd()
+        isAbsolute ? normalizedServerRoot : join(process.cwd(), normalizedServerRoot)
       );
 
       const rel = relative(rootDir, absoluteFilePath);
