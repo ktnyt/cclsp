@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { constants, access, readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
 import type {
@@ -135,21 +135,26 @@ export class LSPClient {
     }
 
     // Multiple servers match - pick the one with most specific rootDir
-    const absoluteFilePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath);
+    const absoluteFilePath = normalize(
+      filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
+    );
     let bestMatch: LSPServerConfig | null = null;
     let longestRootLength = -1;
 
     for (const server of matchingServers) {
-      const rootDir = server.rootDir
-        ? server.rootDir.startsWith('/')
-          ? server.rootDir
-          : join(process.cwd(), server.rootDir)
-        : process.cwd();
+      const rootDir = normalize(
+        server.rootDir
+          ? server.rootDir.startsWith('/')
+            ? server.rootDir
+            : join(process.cwd(), server.rootDir)
+          : process.cwd()
+      );
 
       const rel = relative(rootDir, absoluteFilePath);
 
       // File is inside rootDir if relative path doesn't escape with '..'
-      if (!rel.startsWith('..') && !rel.startsWith('/')) {
+      // Works on both Unix and Windows (normalize handles path separators)
+      if (!rel.startsWith('..')) {
         if (rootDir.length > longestRootLength) {
           longestRootLength = rootDir.length;
           bestMatch = server;
