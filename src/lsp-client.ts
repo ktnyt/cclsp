@@ -5,6 +5,9 @@ import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
 import type {
+  CallHierarchyIncomingCall,
+  CallHierarchyItem,
+  CallHierarchyOutgoingCall,
   Config,
   Diagnostic,
   DocumentDiagnosticReport,
@@ -1601,6 +1604,179 @@ export class LSPClient {
 
       return [];
     }
+  }
+
+  async hover(
+    filePath: string,
+    position: Position
+  ): Promise<{ contents: string | { kind: string; value: string }; range?: { start: Position; end: Position } } | null> {
+    process.stderr.write(
+      `[DEBUG hover] Requesting hover for ${filePath} at ${position.line}:${position.character}\n`
+    );
+
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    const method = 'textDocument/hover';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+      },
+      timeout
+    );
+
+    if (result && typeof result === 'object' && 'contents' in result) {
+      return result as { contents: string | { kind: string; value: string }; range?: { start: Position; end: Position } };
+    }
+
+    return null;
+  }
+
+  async workspaceSymbol(query: string): Promise<SymbolInformation[]> {
+    process.stderr.write(`[DEBUG workspaceSymbol] Searching for "${query}"\n`);
+
+    // Get any running server to send the request
+    const servers = Array.from(this.servers.values());
+    if (servers.length === 0) {
+      process.stderr.write('[DEBUG workspaceSymbol] No LSP servers running\n');
+      return [];
+    }
+
+    const serverState = servers[0];
+    if (!serverState) return [];
+
+    await serverState.initializationPromise;
+
+    const method = 'workspace/symbol';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      { query },
+      timeout
+    );
+
+    if (Array.isArray(result)) {
+      return result as SymbolInformation[];
+    }
+
+    return [];
+  }
+
+  async findImplementation(filePath: string, position: Position): Promise<Location[]> {
+    process.stderr.write(
+      `[DEBUG findImplementation] Requesting implementation for ${filePath} at ${position.line}:${position.character}\n`
+    );
+
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    const method = 'textDocument/implementation';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+      },
+      timeout
+    );
+
+    if (Array.isArray(result)) {
+      return result.map((loc: LSPLocation) => ({
+        uri: loc.uri,
+        range: loc.range,
+      }));
+    }
+    if (result && typeof result === 'object' && 'uri' in result) {
+      const location = result as LSPLocation;
+      return [{ uri: location.uri, range: location.range }];
+    }
+
+    return [];
+  }
+
+  async prepareCallHierarchy(filePath: string, position: Position): Promise<CallHierarchyItem[]> {
+    process.stderr.write(
+      `[DEBUG prepareCallHierarchy] Requesting call hierarchy for ${filePath} at ${position.line}:${position.character}\n`
+    );
+
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+    await this.ensureFileOpen(serverState, filePath);
+
+    const method = 'textDocument/prepareCallHierarchy';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      {
+        textDocument: { uri: pathToUri(filePath) },
+        position,
+      },
+      timeout
+    );
+
+    if (Array.isArray(result)) {
+      return result as CallHierarchyItem[];
+    }
+
+    return [];
+  }
+
+  async incomingCalls(item: CallHierarchyItem): Promise<CallHierarchyIncomingCall[]> {
+    process.stderr.write(`[DEBUG incomingCalls] Requesting incoming calls for ${item.name}\n`);
+
+    // Extract file path from item URI
+    const filePath = item.uri.replace('file://', '');
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+
+    const method = 'callHierarchy/incomingCalls';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      { item },
+      timeout
+    );
+
+    if (Array.isArray(result)) {
+      return result as CallHierarchyIncomingCall[];
+    }
+
+    return [];
+  }
+
+  async outgoingCalls(item: CallHierarchyItem): Promise<CallHierarchyOutgoingCall[]> {
+    process.stderr.write(`[DEBUG outgoingCalls] Requesting outgoing calls for ${item.name}\n`);
+
+    // Extract file path from item URI
+    const filePath = item.uri.replace('file://', '');
+    const serverState = await this.getServer(filePath);
+    await serverState.initializationPromise;
+
+    const method = 'callHierarchy/outgoingCalls';
+    const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
+    const result = await this.sendRequest(
+      serverState.process,
+      method,
+      { item },
+      timeout
+    );
+
+    if (Array.isArray(result)) {
+      return result as CallHierarchyOutgoingCall[];
+    }
+
+    return [];
   }
 
   async preloadServers(debug = true): Promise<void> {
