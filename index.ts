@@ -190,6 +190,136 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: 'get_hover',
+        description:
+          'Get hover information (documentation, type info) for a symbol at a specific position in a file.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (1-indexed)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (1-indexed)',
+            },
+          },
+          required: ['file_path', 'line', 'character'],
+        },
+      },
+      {
+        name: 'find_workspace_symbols',
+        description:
+          'Search for symbols across the entire workspace by name. Returns matching symbols from all files.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The symbol name or pattern to search for',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'find_implementation',
+        description:
+          'Find implementations of an interface or abstract method. Returns locations of all implementations.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (1-indexed)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (1-indexed)',
+            },
+          },
+          required: ['file_path', 'line', 'character'],
+        },
+      },
+      {
+        name: 'prepare_call_hierarchy',
+        description:
+          'Get call hierarchy item at a position. Use this to prepare for incoming_calls or outgoing_calls.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (1-indexed)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (1-indexed)',
+            },
+          },
+          required: ['file_path', 'line', 'character'],
+        },
+      },
+      {
+        name: 'get_incoming_calls',
+        description:
+          'Find all functions/methods that call the function at a position. Requires prepare_call_hierarchy first.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (1-indexed)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (1-indexed)',
+            },
+          },
+          required: ['file_path', 'line', 'character'],
+        },
+      },
+      {
+        name: 'get_outgoing_calls',
+        description:
+          'Find all functions/methods called by the function at a position. Requires prepare_call_hierarchy first.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The path to the file',
+            },
+            line: {
+              type: 'number',
+              description: 'The line number (1-indexed)',
+            },
+            character: {
+              type: 'number',
+              description: 'The character position in the line (1-indexed)',
+            },
+          },
+          required: ['file_path', 'line', 'character'],
+        },
+      },
     ],
   };
 });
@@ -688,6 +818,341 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Error restarting servers: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'get_hover') {
+      const { file_path, line, character } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const result = await lspClient.hover(absolutePath, {
+          line: line - 1,
+          character: character - 1,
+        });
+
+        if (!result) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No hover information available at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        let hoverText: string;
+        if (typeof result.contents === 'string') {
+          hoverText = result.contents;
+        } else if (result.contents && typeof result.contents === 'object') {
+          hoverText = result.contents.value || JSON.stringify(result.contents);
+        } else {
+          hoverText = JSON.stringify(result.contents);
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Hover information at ${file_path}:${line}:${character}:\n\n${hoverText}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error getting hover info: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'find_workspace_symbols') {
+      const { query } = args as { query: string };
+
+      try {
+        const symbols = await lspClient.workspaceSymbol(query);
+
+        if (symbols.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No symbols found matching "${query}"`,
+              },
+            ],
+          };
+        }
+
+        const symbolList = symbols.map((sym) => {
+          const filePath = uriToPath(sym.location.uri);
+          const { start } = sym.location.range;
+          return `• ${sym.name} (${lspClient.symbolKindToString(sym.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`;
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${symbols.length} symbol(s) matching "${query}":\n\n${symbolList.join('\n')}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error searching symbols: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'find_implementation') {
+      const { file_path, line, character } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const locations = await lspClient.findImplementation(absolutePath, {
+          line: line - 1,
+          character: character - 1,
+        });
+
+        if (locations.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No implementations found at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        const locationList = locations.map((loc) => {
+          const filePath = uriToPath(loc.uri);
+          const { start } = loc.range;
+          return `${filePath}:${start.line + 1}:${start.character + 1}`;
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${locations.length} implementation(s):\n\n${locationList.join('\n')}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error finding implementations: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'prepare_call_hierarchy') {
+      const { file_path, line, character } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const items = await lspClient.prepareCallHierarchy(absolutePath, {
+          line: line - 1,
+          character: character - 1,
+        });
+
+        if (items.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No call hierarchy item found at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        const itemList = items.map((item) => {
+          const filePath = uriToPath(item.uri);
+          const { start } = item.selectionRange;
+          return `• ${item.name} (${lspClient.symbolKindToString(item.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}${item.detail ? ` - ${item.detail}` : ''}`;
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Call hierarchy item(s) at ${file_path}:${line}:${character}:\n\n${itemList.join('\n')}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error preparing call hierarchy: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'get_incoming_calls') {
+      const { file_path, line, character } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const items = await lspClient.prepareCallHierarchy(absolutePath, {
+          line: line - 1,
+          character: character - 1,
+        });
+
+        if (items.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No call hierarchy item found at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        const allCalls = [];
+        for (const item of items) {
+          const calls = await lspClient.incomingCalls(item);
+          for (const call of calls) {
+            const filePath = uriToPath(call.from.uri);
+            const { start } = call.from.selectionRange;
+            allCalls.push(
+              `• ${call.from.name} (${lspClient.symbolKindToString(call.from.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`
+            );
+          }
+        }
+
+        if (allCalls.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No incoming calls found for the function at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${allCalls.length} incoming call(s):\n\n${allCalls.join('\n')}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error finding incoming calls: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (name === 'get_outgoing_calls') {
+      const { file_path, line, character } = args as {
+        file_path: string;
+        line: number;
+        character: number;
+      };
+      const absolutePath = resolve(file_path);
+
+      try {
+        const items = await lspClient.prepareCallHierarchy(absolutePath, {
+          line: line - 1,
+          character: character - 1,
+        });
+
+        if (items.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No call hierarchy item found at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        const allCalls = [];
+        for (const item of items) {
+          const calls = await lspClient.outgoingCalls(item);
+          for (const call of calls) {
+            const filePath = uriToPath(call.to.uri);
+            const { start } = call.to.selectionRange;
+            allCalls.push(
+              `• ${call.to.name} (${lspClient.symbolKindToString(call.to.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`
+            );
+          }
+        }
+
+        if (allCalls.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No outgoing calls found for the function at ${file_path}:${line}:${character}`,
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Found ${allCalls.length} outgoing call(s):\n\n${allCalls.join('\n')}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error finding outgoing calls: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
         };
