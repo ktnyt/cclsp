@@ -671,10 +671,11 @@ export class LSPClient {
     }
   }
 
-  private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<void> {
-    if (serverState.openFiles.has(filePath)) {
+  private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<boolean> {
+    const wasAlreadyOpen = serverState.openFiles.has(filePath);
+    if (wasAlreadyOpen) {
       process.stderr.write(`[DEBUG ensureFileOpen] File already open: ${filePath}\n`);
-      return;
+      return false; // Return false to indicate file was already open
     }
 
     process.stderr.write(`[DEBUG ensureFileOpen] Opening file: ${filePath}\n`);
@@ -700,6 +701,7 @@ export class LSPClient {
       serverState.openFiles.add(filePath);
       serverState.fileVersions.set(filePath, 1);
       process.stderr.write(`[DEBUG ensureFileOpen] File opened successfully: ${filePath}\n`);
+      return true; // Return true to indicate file was just opened
     } catch (error) {
       process.stderr.write(`[DEBUG ensureFileOpen] Failed to open file ${filePath}: ${error}\n`);
       throw error;
@@ -823,7 +825,19 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    await this.ensureFileOpen(serverState, filePath);
+    const wasJustOpened = await this.ensureFileOpen(serverState, filePath);
+
+    // If the file was just opened, give the LSP server time to index the project
+    // This fixes issue #27 where the first find_references call returns incomplete results
+    if (wasJustOpened) {
+      process.stderr.write(
+        '[DEBUG findDefinition] File was just opened, waiting for server to index project...\n'
+      );
+      // Wait a short time for the server to process the didOpen notification
+      // and start indexing the project. This is especially important for
+      // workspace-wide operations like find_references.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
 
     process.stderr.write('[DEBUG findDefinition] Sending textDocument/definition request\n');
     const method = 'textDocument/definition';
@@ -884,7 +898,19 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    await this.ensureFileOpen(serverState, filePath);
+    const wasJustOpened = await this.ensureFileOpen(serverState, filePath);
+
+    // If the file was just opened, give the LSP server time to index the project
+    // This fixes issue #27 where the first find_references call returns incomplete results
+    if (wasJustOpened) {
+      process.stderr.write(
+        '[DEBUG findReferences] File was just opened, waiting for server to index project...\n'
+      );
+      // Wait a short time for the server to process the didOpen notification
+      // and start indexing the project. This is especially important for
+      // workspace-wide operations like find_references.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
 
     process.stderr.write(
       `[DEBUG] findReferences for ${filePath} at ${position.line}:${position.character}, includeDeclaration: ${includeDeclaration}\n`
