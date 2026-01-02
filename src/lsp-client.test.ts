@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
-import { pathToUri } from './utils.js';
+import { pathToUri, uriToPath } from './utils.js';
 
 // Type for accessing private methods in tests
 type LSPClientInternal = {
@@ -1458,7 +1458,7 @@ describe('LSPClient', () => {
       const result = await client.incomingCalls(mockItem);
 
       expect(result).toEqual(mockIncomingCalls);
-      expect(getServerSpy).toHaveBeenCalledWith('/test.ts');
+      expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
       expect(sendRequestSpy).toHaveBeenCalledWith(
         mockServerState.process,
         'callHierarchy/incomingCalls',
@@ -1507,6 +1507,7 @@ describe('LSPClient', () => {
       const result = await client.incomingCalls(mockItem);
 
       expect(result).toEqual([]);
+      expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
 
       getServerSpy.mockRestore();
       sendRequestSpy.mockRestore();
@@ -1575,7 +1576,7 @@ describe('LSPClient', () => {
       const result = await client.outgoingCalls(mockItem);
 
       expect(result).toEqual(mockOutgoingCalls);
-      expect(getServerSpy).toHaveBeenCalledWith('/test.ts');
+      expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
       expect(sendRequestSpy).toHaveBeenCalledWith(
         mockServerState.process,
         'callHierarchy/outgoingCalls',
@@ -1624,6 +1625,7 @@ describe('LSPClient', () => {
       const result = await client.outgoingCalls(mockItem);
 
       expect(result).toEqual([]);
+      expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
 
       getServerSpy.mockRestore();
       sendRequestSpy.mockRestore();
