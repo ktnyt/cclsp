@@ -21,7 +21,7 @@ import type {
   SymbolMatch,
 } from './types.js';
 import { SymbolKind } from './types.js';
-import { pathToUri } from './utils.js';
+import { pathToUri, uriToPath } from './utils.js';
 
 interface LSPMessage {
   jsonrpc: string;
@@ -1735,7 +1735,7 @@ export class LSPClient {
     process.stderr.write(`[DEBUG incomingCalls] Requesting incoming calls for ${item.name}\n`);
 
     // Extract file path from item URI
-    const filePath = item.uri.replace('file://', '');
+    const filePath = uriToPath(item.uri);
     const serverState = await this.getServer(filePath);
     await serverState.initializationPromise;
 
@@ -1759,7 +1759,7 @@ export class LSPClient {
     process.stderr.write(`[DEBUG outgoingCalls] Requesting outgoing calls for ${item.name}\n`);
 
     // Extract file path from item URI
-    const filePath = item.uri.replace('file://', '');
+    const filePath = uriToPath(item.uri);
     const serverState = await this.getServer(filePath);
     await serverState.initializationPromise;
 
