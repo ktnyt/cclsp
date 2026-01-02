@@ -1609,7 +1609,10 @@ export class LSPClient {
   async hover(
     filePath: string,
     position: Position
-  ): Promise<{ contents: string | { kind: string; value: string }; range?: { start: Position; end: Position } } | null> {
+  ): Promise<{
+    contents: string | { kind: string; value: string };
+    range?: { start: Position; end: Position };
+  } | null> {
     process.stderr.write(
       `[DEBUG hover] Requesting hover for ${filePath} at ${position.line}:${position.character}\n`
     );
@@ -1631,7 +1634,10 @@ export class LSPClient {
     );
 
     if (result && typeof result === 'object' && 'contents' in result) {
-      return result as { contents: string | { kind: string; value: string }; range?: { start: Position; end: Position } };
+      return result as {
+        contents: string | { kind: string; value: string };
+        range?: { start: Position; end: Position };
+      };
     }
 
     return null;
@@ -1654,12 +1660,7 @@ export class LSPClient {
 
     const method = 'workspace/symbol';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
-      method,
-      { query },
-      timeout
-    );
+    const result = await this.sendRequest(serverState.process, method, { query }, timeout);
 
     if (Array.isArray(result)) {
       return result as SymbolInformation[];
@@ -1741,12 +1742,7 @@ export class LSPClient {
 
     const method = 'callHierarchy/incomingCalls';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
-      method,
-      { item },
-      timeout
-    );
+    const result = await this.sendRequest(serverState.process, method, { item }, timeout);
 
     if (Array.isArray(result)) {
       return result as CallHierarchyIncomingCall[];
@@ -1765,12 +1761,7 @@ export class LSPClient {
 
     const method = 'callHierarchy/outgoingCalls';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
-      method,
-      { item },
-      timeout
-    );
+    const result = await this.sendRequest(serverState.process, method, { item }, timeout);
 
     if (Array.isArray(result)) {
       return result as CallHierarchyOutgoingCall[];
