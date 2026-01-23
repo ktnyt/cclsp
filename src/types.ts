@@ -168,3 +168,37 @@ export interface DocumentDiagnosticReport {
   resultId?: string;
   items?: Diagnostic[];
 }
+
+// Call Hierarchy types
+export interface CallHierarchyItem {
+  name: string;
+  kind: SymbolKind;
+  tags?: SymbolTag[];
+  detail?: string;
+  uri: string;
+  range: {
+    start: Position;
+    end: Position;
+  };
+  selectionRange: {
+    start: Position;
+    end: Position;
+  };
+  data?: unknown;
+}
+
+export interface CallHierarchyIncomingCall {
+  from: CallHierarchyItem;
+  fromRanges: Array<{
+    start: Position;
+    end: Position;
+  }>;
+}
+
+export interface CallHierarchyOutgoingCall {
+  to: CallHierarchyItem;
+  fromRanges: Array<{
+    start: Position;
+    end: Position;
+  }>;
+}
