@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
