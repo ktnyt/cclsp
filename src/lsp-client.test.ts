@@ -1399,11 +1399,13 @@ describe('LSPClient', () => {
   describe('incomingCalls', () => {
     it('should return incoming calls using uriToPath', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const testFilePath = join(TEST_DIR, 'test.ts');
+      const callerFilePath = join(TEST_DIR, 'caller1.ts');
 
       const mockItem = {
         name: 'testFunction',
         kind: 12, // Function
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(testFilePath),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1419,7 +1421,7 @@ describe('LSPClient', () => {
           from: {
             name: 'caller1',
             kind: 12,
-            uri: pathToUri('/caller1.ts'),
+            uri: pathToUri(callerFilePath),
             range: {
               start: { line: 5, character: 0 },
               end: { line: 5, character: 10 },
@@ -1472,11 +1474,12 @@ describe('LSPClient', () => {
 
     it('should return empty array when no incoming calls', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const testFilePath = join(TEST_DIR, 'test.ts');
 
       const mockItem = {
         name: 'testFunction',
         kind: 12,
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(testFilePath),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1517,11 +1520,13 @@ describe('LSPClient', () => {
   describe('outgoingCalls', () => {
     it('should return outgoing calls using uriToPath', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const testFilePath = join(TEST_DIR, 'test.ts');
+      const calleeFilePath = join(TEST_DIR, 'callee1.ts');
 
       const mockItem = {
         name: 'testFunction',
         kind: 12, // Function
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(testFilePath),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1537,7 +1542,7 @@ describe('LSPClient', () => {
           to: {
             name: 'callee1',
             kind: 12,
-            uri: pathToUri('/callee1.ts'),
+            uri: pathToUri(calleeFilePath),
             range: {
               start: { line: 10, character: 0 },
               end: { line: 10, character: 15 },
@@ -1590,11 +1595,12 @@ describe('LSPClient', () => {
 
     it('should return empty array when no outgoing calls', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const testFilePath = join(TEST_DIR, 'test.ts');
 
       const mockItem = {
         name: 'testFunction',
         kind: 12,
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(testFilePath),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
