@@ -109,6 +109,14 @@ export class LSPClient {
     }
   }
 
+  /**
+   * Returns the tools configuration from cclsp.json.
+   * Used to filter which MCP tools are exposed.
+   */
+  get tools(): Record<string, boolean> | undefined {
+    return this.config.tools;
+  }
+
   private getServerForFile(filePath: string): LSPServerConfig | null {
     const extension = filePath.split('.').pop();
     if (!extension) return null;
