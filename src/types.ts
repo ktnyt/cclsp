@@ -8,6 +8,24 @@ export interface LSPServerConfig {
 
 export interface Config {
   servers: LSPServerConfig[];
+  /**
+   * Map of tool names to enabled status.
+   * If a tool is not listed, it defaults to enabled.
+   * Set to `false` to disable a specific tool.
+   *
+   * @example
+   * ```json
+   * {
+   *   "tools": {
+   *     "rename_symbol": true,
+   *     "find_references": true,
+   *     "find_definition": false,
+   *     "get_diagnostics": false
+   *   }
+   * }
+   * ```
+   */
+  tools?: Record<string, boolean>;
 }
 
 export interface Position {

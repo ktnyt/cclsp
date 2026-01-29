@@ -8,6 +8,287 @@ import { applyWorkspaceEdit } from './src/file-editor.js';
 import { LSPClient } from './src/lsp-client.js';
 import { uriToPath } from './src/utils.js';
 
+/**
+ * All available MCP tools.
+ * Tools can be enabled/disabled via the `tools` field in cclsp.json.
+ */
+const ALL_TOOLS = [
+  {
+    name: 'find_definition',
+    description:
+      'Find the definition of a symbol by name and kind in a file. Returns definitions for all matching symbols.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        symbol_name: {
+          type: 'string',
+          description: 'The name of the symbol',
+        },
+        symbol_kind: {
+          type: 'string',
+          description: 'The kind of symbol (function, class, variable, method, etc.)',
+        },
+      },
+      required: ['file_path', 'symbol_name'],
+    },
+  },
+  {
+    name: 'find_references',
+    description:
+      'Find all references to a symbol across the entire workspace. Returns references for all matching symbols.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file where the symbol is defined',
+        },
+        symbol_name: {
+          type: 'string',
+          description: 'The name of the symbol',
+        },
+        symbol_kind: {
+          type: 'string',
+          description: 'The kind of symbol (function, class, variable, method, etc.)',
+        },
+        include_declaration: {
+          type: 'boolean',
+          description: 'Whether to include the declaration',
+          default: true,
+        },
+      },
+      required: ['file_path', 'symbol_name'],
+    },
+  },
+  {
+    name: 'rename_symbol',
+    description:
+      'Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        symbol_name: {
+          type: 'string',
+          description: 'The name of the symbol',
+        },
+        symbol_kind: {
+          type: 'string',
+          description: 'The kind of symbol (function, class, variable, method, etc.)',
+        },
+        new_name: {
+          type: 'string',
+          description: 'The new name for the symbol',
+        },
+        dry_run: {
+          type: 'boolean',
+          description: 'If true, only preview the changes without applying them (default: false)',
+        },
+      },
+      required: ['file_path', 'symbol_name', 'new_name'],
+    },
+  },
+  {
+    name: 'rename_symbol_strict',
+    description:
+      'Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+        new_name: {
+          type: 'string',
+          description: 'The new name for the symbol',
+        },
+        dry_run: {
+          type: 'boolean',
+          description: 'If true, only preview the changes without applying them (default: false)',
+        },
+      },
+      required: ['file_path', 'line', 'character', 'new_name'],
+    },
+  },
+  {
+    name: 'get_diagnostics',
+    description:
+      'Get language diagnostics (errors, warnings, hints) for a file. Uses LSP textDocument/diagnostic to pull current diagnostics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file to get diagnostics for',
+        },
+      },
+      required: ['file_path'],
+    },
+  },
+  {
+    name: 'restart_server',
+    description:
+      'Manually restart LSP servers. Can restart servers for specific file extensions or all running servers.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        extensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Array of file extensions to restart servers for (e.g., ["ts", "tsx"]). If not provided, all servers will be restarted.',
+        },
+      },
+    },
+  },
+  {
+    name: 'get_hover',
+    description:
+      'Get hover information (documentation, type info) for a symbol at a specific position in a file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+      },
+      required: ['file_path', 'line', 'character'],
+    },
+  },
+  {
+    name: 'find_workspace_symbols',
+    description:
+      'Search for symbols across the entire workspace by name. Returns matching symbols from all files.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The symbol name or pattern to search for',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'find_implementation',
+    description:
+      'Find implementations of an interface or abstract method. Returns locations of all implementations.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+      },
+      required: ['file_path', 'line', 'character'],
+    },
+  },
+  {
+    name: 'prepare_call_hierarchy',
+    description:
+      'Get call hierarchy item at a position. Use this to prepare for incoming_calls or outgoing_calls.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+      },
+      required: ['file_path', 'line', 'character'],
+    },
+  },
+  {
+    name: 'get_incoming_calls',
+    description:
+      'Find all functions/methods that call the function at a position. Requires prepare_call_hierarchy first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+      },
+      required: ['file_path', 'line', 'character'],
+    },
+  },
+  {
+    name: 'get_outgoing_calls',
+    description:
+      'Find all functions/methods called by the function at a position. Requires prepare_call_hierarchy first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'The path to the file',
+        },
+        line: {
+          type: 'number',
+          description: 'The line number (1-indexed)',
+        },
+        character: {
+          type: 'number',
+          description: 'The character position in the line (1-indexed)',
+        },
+      },
+      required: ['file_path', 'line', 'character'],
+    },
+  },
+] as const;
+
 // Handle subcommands
 const args = process.argv.slice(2);
 if (args.length > 0) {
@@ -42,290 +323,34 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: 'find_definition',
-        description:
-          'Find the definition of a symbol by name and kind in a file. Returns definitions for all matching symbols.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            symbol_name: {
-              type: 'string',
-              description: 'The name of the symbol',
-            },
-            symbol_kind: {
-              type: 'string',
-              description: 'The kind of symbol (function, class, variable, method, etc.)',
-            },
-          },
-          required: ['file_path', 'symbol_name'],
-        },
-      },
-      {
-        name: 'find_references',
-        description:
-          'Find all references to a symbol across the entire workspace. Returns references for all matching symbols.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file where the symbol is defined',
-            },
-            symbol_name: {
-              type: 'string',
-              description: 'The name of the symbol',
-            },
-            symbol_kind: {
-              type: 'string',
-              description: 'The kind of symbol (function, class, variable, method, etc.)',
-            },
-            include_declaration: {
-              type: 'boolean',
-              description: 'Whether to include the declaration',
-              default: true,
-            },
-          },
-          required: ['file_path', 'symbol_name'],
-        },
-      },
-      {
-        name: 'rename_symbol',
-        description:
-          'Rename a symbol by name and kind in a file. If multiple symbols match, returns candidate positions and suggests using rename_symbol_strict. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            symbol_name: {
-              type: 'string',
-              description: 'The name of the symbol',
-            },
-            symbol_kind: {
-              type: 'string',
-              description: 'The kind of symbol (function, class, variable, method, etc.)',
-            },
-            new_name: {
-              type: 'string',
-              description: 'The new name for the symbol',
-            },
-            dry_run: {
-              type: 'boolean',
-              description:
-                'If true, only preview the changes without applying them (default: false)',
-            },
-          },
-          required: ['file_path', 'symbol_name', 'new_name'],
-        },
-      },
-      {
-        name: 'rename_symbol_strict',
-        description:
-          'Rename a symbol at a specific position in a file. Use this when rename_symbol returns multiple candidates. By default, this will apply the rename to the files. Use dry_run to preview changes without applying them.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-            new_name: {
-              type: 'string',
-              description: 'The new name for the symbol',
-            },
-            dry_run: {
-              type: 'boolean',
-              description:
-                'If true, only preview the changes without applying them (default: false)',
-            },
-          },
-          required: ['file_path', 'line', 'character', 'new_name'],
-        },
-      },
-      {
-        name: 'get_diagnostics',
-        description:
-          'Get language diagnostics (errors, warnings, hints) for a file. Uses LSP textDocument/diagnostic to pull current diagnostics.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file to get diagnostics for',
-            },
-          },
-          required: ['file_path'],
-        },
-      },
-      {
-        name: 'restart_server',
-        description:
-          'Manually restart LSP servers. Can restart servers for specific file extensions or all running servers.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            extensions: {
-              type: 'array',
-              items: { type: 'string' },
-              description:
-                'Array of file extensions to restart servers for (e.g., ["ts", "tsx"]). If not provided, all servers will be restarted.',
-            },
-          },
-        },
-      },
-      {
-        name: 'get_hover',
-        description:
-          'Get hover information (documentation, type info) for a symbol at a specific position in a file.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-          },
-          required: ['file_path', 'line', 'character'],
-        },
-      },
-      {
-        name: 'find_workspace_symbols',
-        description:
-          'Search for symbols across the entire workspace by name. Returns matching symbols from all files.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'The symbol name or pattern to search for',
-            },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'find_implementation',
-        description:
-          'Find implementations of an interface or abstract method. Returns locations of all implementations.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-          },
-          required: ['file_path', 'line', 'character'],
-        },
-      },
-      {
-        name: 'prepare_call_hierarchy',
-        description:
-          'Get call hierarchy item at a position. Use this to prepare for incoming_calls or outgoing_calls.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-          },
-          required: ['file_path', 'line', 'character'],
-        },
-      },
-      {
-        name: 'get_incoming_calls',
-        description:
-          'Find all functions/methods that call the function at a position. Requires prepare_call_hierarchy first.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-          },
-          required: ['file_path', 'line', 'character'],
-        },
-      },
-      {
-        name: 'get_outgoing_calls',
-        description:
-          'Find all functions/methods called by the function at a position. Requires prepare_call_hierarchy first.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'The path to the file',
-            },
-            line: {
-              type: 'number',
-              description: 'The line number (1-indexed)',
-            },
-            character: {
-              type: 'number',
-              description: 'The character position in the line (1-indexed)',
-            },
-          },
-          required: ['file_path', 'line', 'character'],
-        },
-      },
-    ],
-  };
+  const toolsConfig = lspClient.tools;
+
+  // Filter tools based on configuration
+  // If a tool is not in the config, it defaults to enabled
+  // If a tool is explicitly set to false, it's disabled
+  const enabledTools = ALL_TOOLS.filter((tool) => {
+    if (!toolsConfig) return true;
+    return toolsConfig[tool.name] !== false;
+  });
+
+  return { tools: enabledTools };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  // Check if tool is enabled
+  const toolsConfig = lspClient.tools;
+  if (toolsConfig && toolsConfig[name] === false) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Tool "${name}" is disabled. Enable it in cclsp.json by setting "tools": { "${name}": true }`,
+        },
+      ],
+    };
+  }
 
   try {
     if (name === 'find_definition') {
