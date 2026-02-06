@@ -6,7 +6,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { applyWorkspaceEdit } from './src/file-editor.js';
 import { LSPClient } from './src/lsp-client.js';
-import { uriToPath } from './src/utils.js';
+import { formatLocationWithContext, uriToPath } from './src/utils.js';
 
 // Handle subcommands
 const args = process.argv.slice(2);
@@ -63,6 +63,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'The kind of symbol (function, class, variable, method, etc.)',
             },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
+            },
           },
           required: ['file_path', 'symbol_name'],
         },
@@ -90,6 +102,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'boolean',
               description: 'Whether to include the declaration',
               default: true,
+            },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
             },
           },
           required: ['file_path', 'symbol_name'],
@@ -224,6 +248,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'The symbol name or pattern to search for',
             },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
+            },
           },
           required: ['query'],
         },
@@ -246,6 +282,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             character: {
               type: 'number',
               description: 'The character position in the line (1-indexed)',
+            },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
             },
           },
           required: ['file_path', 'line', 'character'],
@@ -293,6 +341,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'number',
               description: 'The character position in the line (1-indexed)',
             },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
+            },
           },
           required: ['file_path', 'line', 'character'],
         },
@@ -316,6 +376,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'number',
               description: 'The character position in the line (1-indexed)',
             },
+            include_context: {
+              type: 'boolean',
+              description:
+                'If true, include source code context around each result location (default: false)',
+              default: false,
+            },
+            context_lines: {
+              type: 'number',
+              description:
+                'Number of lines of context to include before and after the target line (default: 2)',
+              default: 2,
+            },
           },
           required: ['file_path', 'line', 'character'],
         },
@@ -329,12 +401,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === 'find_definition') {
-      const { file_path, symbol_name, symbol_kind } = args as {
+      const {
+        file_path,
+        symbol_name,
+        symbol_kind,
+        include_context = false,
+        context_lines = 2,
+      } = args as {
         file_path: string;
         symbol_name: string;
         symbol_kind?: string;
+        include_context?: boolean;
+        context_lines?: number;
       };
       const absolutePath = resolve(file_path);
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       const result = await lspClient.findSymbolsByName(absolutePath, symbol_name, symbol_kind);
       const { matches: symbolMatches, warning } = result;
@@ -369,10 +450,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const locationResults = locations
               .map((loc) => {
                 const filePath = uriToPath(loc.uri);
-                const { start, end } = loc.range;
-                return `${filePath}:${start.line + 1}:${start.character + 1}`;
+                const { start } = loc.range;
+                return formatLocationWithContext(
+                  filePath,
+                  start.line + 1,
+                  start.character + 1,
+                  include_context,
+                  contextOptions
+                );
               })
-              .join('\n');
+              .join(include_context ? '\n\n' : '\n');
 
             results.push(
               `Results for ${match.name} (${lspClient.symbolKindToString(match.kind)}) at ${file_path}:${match.position.line + 1}:${match.position.character + 1}:\n${locationResults}`
@@ -421,13 +508,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         symbol_name,
         symbol_kind,
         include_declaration = true,
+        include_context = false,
+        context_lines = 2,
       } = args as {
         file_path: string;
         symbol_name: string;
         symbol_kind?: string;
         include_declaration?: boolean;
+        include_context?: boolean;
+        context_lines?: number;
       };
       const absolutePath = resolve(file_path);
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       const result = await lspClient.findSymbolsByName(absolutePath, symbol_name, symbol_kind);
       const { matches: symbolMatches, warning } = result;
@@ -460,10 +552,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const locationResults = locations
               .map((loc) => {
                 const filePath = uriToPath(loc.uri);
-                const { start, end } = loc.range;
-                return `${filePath}:${start.line + 1}:${start.character + 1}`;
+                const { start } = loc.range;
+                return formatLocationWithContext(
+                  filePath,
+                  start.line + 1,
+                  start.character + 1,
+                  include_context,
+                  contextOptions
+                );
               })
-              .join('\n');
+              .join(include_context ? '\n\n' : '\n');
 
             results.push(
               `Results for ${match.name} (${lspClient.symbolKindToString(match.kind)}) at ${file_path}:${match.position.line + 1}:${match.position.character + 1}:\n${locationResults}`
@@ -879,7 +977,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'find_workspace_symbols') {
-      const { query } = args as { query: string };
+      const { query, include_context = false, context_lines = 2 } = args as {
+        query: string;
+        include_context?: boolean;
+        context_lines?: number;
+      };
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       try {
         const symbols = await lspClient.workspaceSymbol(query);
@@ -898,14 +1001,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const symbolList = symbols.map((sym) => {
           const filePath = uriToPath(sym.location.uri);
           const { start } = sym.location.range;
-          return `• ${sym.name} (${lspClient.symbolKindToString(sym.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`;
+          const location = formatLocationWithContext(
+            filePath,
+            start.line + 1,
+            start.character + 1,
+            include_context,
+            contextOptions
+          );
+          if (include_context) {
+            return `• ${sym.name} (${lspClient.symbolKindToString(sym.kind)})\n  ${location.replace(/\n/g, '\n  ')}`;
+          }
+          return `• ${sym.name} (${lspClient.symbolKindToString(sym.kind)}) at ${location}`;
         });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Found ${symbols.length} symbol(s) matching "${query}":\n\n${symbolList.join('\n')}`,
+              text: `Found ${symbols.length} symbol(s) matching "${query}":\n\n${symbolList.join(include_context ? '\n\n' : '\n')}`,
             },
           ],
         };
@@ -922,12 +1035,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'find_implementation') {
-      const { file_path, line, character } = args as {
+      const { file_path, line, character, include_context = false, context_lines = 2 } = args as {
         file_path: string;
         line: number;
         character: number;
+        include_context?: boolean;
+        context_lines?: number;
       };
       const absolutePath = resolve(file_path);
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       try {
         const locations = await lspClient.findImplementation(absolutePath, {
@@ -949,14 +1065,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const locationList = locations.map((loc) => {
           const filePath = uriToPath(loc.uri);
           const { start } = loc.range;
-          return `${filePath}:${start.line + 1}:${start.character + 1}`;
+          return formatLocationWithContext(
+            filePath,
+            start.line + 1,
+            start.character + 1,
+            include_context,
+            contextOptions
+          );
         });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Found ${locations.length} implementation(s):\n\n${locationList.join('\n')}`,
+              text: `Found ${locations.length} implementation(s):\n\n${locationList.join(include_context ? '\n\n' : '\n')}`,
             },
           ],
         };
@@ -1024,12 +1146,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'get_incoming_calls') {
-      const { file_path, line, character } = args as {
+      const { file_path, line, character, include_context = false, context_lines = 2 } = args as {
         file_path: string;
         line: number;
         character: number;
+        include_context?: boolean;
+        context_lines?: number;
       };
       const absolutePath = resolve(file_path);
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       try {
         const items = await lspClient.prepareCallHierarchy(absolutePath, {
@@ -1054,9 +1179,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           for (const call of calls) {
             const filePath = uriToPath(call.from.uri);
             const { start } = call.from.selectionRange;
-            allCalls.push(
-              `• ${call.from.name} (${lspClient.symbolKindToString(call.from.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`
+            const location = formatLocationWithContext(
+              filePath,
+              start.line + 1,
+              start.character + 1,
+              include_context,
+              contextOptions
             );
+            if (include_context) {
+              allCalls.push(
+                `• ${call.from.name} (${lspClient.symbolKindToString(call.from.kind)})\n  ${location.replace(/\n/g, '\n  ')}`
+              );
+            } else {
+              allCalls.push(
+                `• ${call.from.name} (${lspClient.symbolKindToString(call.from.kind)}) at ${location}`
+              );
+            }
           }
         }
 
@@ -1075,7 +1213,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Found ${allCalls.length} incoming call(s):\n\n${allCalls.join('\n')}`,
+              text: `Found ${allCalls.length} incoming call(s):\n\n${allCalls.join(include_context ? '\n\n' : '\n')}`,
             },
           ],
         };
@@ -1092,12 +1230,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'get_outgoing_calls') {
-      const { file_path, line, character } = args as {
+      const { file_path, line, character, include_context = false, context_lines = 2 } = args as {
         file_path: string;
         line: number;
         character: number;
+        include_context?: boolean;
+        context_lines?: number;
       };
       const absolutePath = resolve(file_path);
+      const contextOptions = { linesBefore: context_lines, linesAfter: context_lines };
 
       try {
         const items = await lspClient.prepareCallHierarchy(absolutePath, {
@@ -1122,9 +1263,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           for (const call of calls) {
             const filePath = uriToPath(call.to.uri);
             const { start } = call.to.selectionRange;
-            allCalls.push(
-              `• ${call.to.name} (${lspClient.symbolKindToString(call.to.kind)}) at ${filePath}:${start.line + 1}:${start.character + 1}`
+            const location = formatLocationWithContext(
+              filePath,
+              start.line + 1,
+              start.character + 1,
+              include_context,
+              contextOptions
             );
+            if (include_context) {
+              allCalls.push(
+                `• ${call.to.name} (${lspClient.symbolKindToString(call.to.kind)})\n  ${location.replace(/\n/g, '\n  ')}`
+              );
+            } else {
+              allCalls.push(
+                `• ${call.to.name} (${lspClient.symbolKindToString(call.to.kind)}) at ${location}`
+              );
+            }
           }
         }
 
@@ -1143,7 +1297,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Found ${allCalls.length} outgoing call(s):\n\n${allCalls.join('\n')}`,
+              text: `Found ${allCalls.length} outgoing call(s):\n\n${allCalls.join(include_context ? '\n\n' : '\n')}`,
             },
           ],
         };
