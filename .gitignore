@@ -64,3 +64,4 @@ mcp/*/storage.json
 
 # Local claude settings
 .claude/settings.local.json
+.test-move-integration
