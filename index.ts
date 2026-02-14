@@ -320,6 +320,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['file_path', 'line', 'character'],
         },
       },
+      {
+        name: 'move_file',
+        description:
+          'Move or rename a file and automatically update all import paths across the project. Uses LSP workspace/willRenameFiles to compute import changes before moving. Gracefully degrades when the language server does not support file rename operations.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_path: {
+              type: 'string',
+              description: 'The current path of the file to move',
+            },
+            destination_path: {
+              type: 'string',
+              description: 'The new path for the file',
+            },
+            dry_run: {
+              type: 'boolean',
+              description:
+                'If true, only preview what import changes would be made without moving the file (default: false)',
+            },
+          },
+          required: ['source_path', 'destination_path'],
+        },
+      },
     ],
   };
 });
@@ -1157,6 +1181,67 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
+    }
+
+    if (name === 'move_file') {
+      const {
+        source_path,
+        destination_path,
+        dry_run = false,
+      } = args as {
+        source_path: string;
+        destination_path: string;
+        dry_run?: boolean;
+      };
+
+      const absoluteSource = resolve(source_path);
+      const absoluteDest = resolve(destination_path);
+
+      const result = await lspClient.moveFile(absoluteSource, absoluteDest, dry_run);
+
+      const parts: string[] = [];
+
+      if (dry_run) {
+        parts.push('[DRY RUN] Preview of file move:');
+        parts.push(`  From: ${absoluteSource}`);
+        parts.push(`  To: ${absoluteDest}`);
+
+        if (result.importChanges) {
+          parts.push('\nImport changes that would be applied:');
+          for (const [uri, edits] of Object.entries(result.importChanges)) {
+            const filePath = uriToPath(uri);
+            parts.push(`\n  ${filePath}:`);
+            for (const edit of edits) {
+              const { start, end } = edit.range;
+              parts.push(
+                `    Line ${start.line + 1}:${start.character + 1} → ${end.line + 1}:${end.character + 1}: "${edit.newText}"`
+              );
+            }
+          }
+        } else {
+          parts.push('\nNo import changes needed (or server does not support import updates).');
+        }
+      } else {
+        parts.push('Successfully moved file:');
+        parts.push(`  From: ${absoluteSource}`);
+        parts.push(`  To: ${absoluteDest}`);
+
+        if (result.importChanges) {
+          const fileCount = Object.keys(result.importChanges).length;
+          parts.push(`\nUpdated imports in ${fileCount} file(s).`);
+        }
+      }
+
+      if (result.warnings.length > 0) {
+        parts.push('\nWarnings:');
+        for (const warning of result.warnings) {
+          parts.push(`  - ${warning}`);
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: parts.join('\n') }],
+      };
     }
 
     throw new Error(`Unknown tool: ${name}`);

@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
 import { constants, access, readFile } from 'node:fs/promises';
-import { join, normalize, relative } from 'node:path';
+import { dirname, join, normalize, relative } from 'node:path';
+import { applyWorkspaceEdit } from './file-editor.js';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
 import type {
@@ -46,6 +47,7 @@ interface ServerState {
   lastDiagnosticUpdate: Map<string, number>; // Track last update time per file
   diagnosticVersions: Map<string, number>; // Track diagnostic versions per file
   adapter?: import('./lsp/adapters/types.js').ServerAdapter; // Optional adapter for server-specific behavior
+  serverCapabilities?: Record<string, unknown>; // Server capabilities from initialize response
 }
 
 export class LSPClient {
@@ -307,6 +309,10 @@ export class LSPClient {
             documentChanges: true,
           },
           workspaceFolders: true,
+          fileOperations: {
+            willRename: true,
+            didRename: true,
+          },
         },
       },
       rootUri: pathToUri(serverConfig.rootDir || process.cwd()),
@@ -345,6 +351,13 @@ export class LSPClient {
     }
 
     const initResult = await this.sendRequest(childProcess, 'initialize', initializeParams);
+
+    // Store server capabilities for later use
+    if (initResult && typeof initResult === 'object' && 'capabilities' in initResult) {
+      serverState.serverCapabilities = (
+        initResult as { capabilities: Record<string, unknown> }
+      ).capabilities;
+    }
 
     // Send the initialized notification after receiving the initialize response
     await this.sendNotification(childProcess, 'initialized', {});
@@ -1052,6 +1065,204 @@ export class LSPClient {
 
     process.stderr.write('[DEBUG renameSymbol] No rename changes available\n');
     return {};
+  }
+
+  /**
+   * Normalize an LSP WorkspaceEdit result into the `changes` format.
+   * Handles both `changes` (older servers) and `documentChanges` (modern servers) formats.
+   */
+  private normalizeWorkspaceEdit(
+    result: unknown
+  ): Record<string, Array<{ range: { start: Position; end: Position }; newText: string }>> | null {
+    if (!result || typeof result !== 'object') return null;
+
+    if ('changes' in result) {
+      const edit = result as {
+        changes: Record<
+          string,
+          Array<{ range: { start: Position; end: Position }; newText: string }>
+        >;
+      };
+      return edit.changes ?? null;
+    }
+
+    if ('documentChanges' in result) {
+      const edit = result as {
+        documentChanges?: Array<{
+          textDocument: { uri: string; version?: number };
+          edits: Array<{ range: { start: Position; end: Position }; newText: string }>;
+        }>;
+      };
+
+      const changes: Record<
+        string,
+        Array<{ range: { start: Position; end: Position }; newText: string }>
+      > = {};
+
+      if (edit.documentChanges) {
+        for (const change of edit.documentChanges) {
+          if (change.textDocument && change.edits) {
+            const uri = change.textDocument.uri;
+            if (!changes[uri]) {
+              changes[uri] = [];
+            }
+            changes[uri].push(...change.edits);
+          }
+        }
+      }
+
+      return Object.keys(changes).length > 0 ? changes : null;
+    }
+
+    return null;
+  }
+
+  async moveFile(
+    sourcePath: string,
+    destinationPath: string,
+    dryRun = false
+  ): Promise<{
+    moved: boolean;
+    importChanges: Record<
+      string,
+      Array<{ range: { start: Position; end: Position }; newText: string }>
+    > | null;
+    warnings: string[];
+  }> {
+    process.stderr.write(
+      `[DEBUG moveFile] ${dryRun ? '[DRY RUN] ' : ''}Moving ${sourcePath} -> ${destinationPath}\n`
+    );
+
+    // Validate source exists and is a file
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Source file does not exist: ${sourcePath}`);
+    }
+    const stats = lstatSync(sourcePath);
+    if (stats.isDirectory()) {
+      throw new Error(`Source is a directory, not a file: ${sourcePath}`);
+    }
+
+    // Validate destination does not already exist
+    if (existsSync(destinationPath)) {
+      throw new Error(`Destination already exists: ${destinationPath}`);
+    }
+
+    const oldUri = pathToUri(sourcePath);
+    const newUri = pathToUri(destinationPath);
+    const renameParams = { files: [{ oldUri, newUri }] };
+
+    // Collect workspace edits from all servers that support willRenameFiles
+    const mergedChanges: Record<
+      string,
+      Array<{ range: { start: Position; end: Position }; newText: string }>
+    > = {};
+    const warnings: string[] = [];
+
+    for (const serverState of this.servers.values()) {
+      const caps = serverState.serverCapabilities?.workspace as
+        | { fileOperations?: { willRename?: unknown } }
+        | undefined;
+      if (!caps?.fileOperations?.willRename) {
+        warnings.push(
+          `Server ${serverState.config.command[0]} does not support willRenameFiles — imports handled by this server won't be updated.`
+        );
+        continue;
+      }
+
+      try {
+        await serverState.initializationPromise;
+        const timeout = serverState.adapter?.getTimeout?.('workspace/willRenameFiles') ?? 45000;
+        const result = await this.sendRequest(
+          serverState.process,
+          'workspace/willRenameFiles',
+          renameParams,
+          timeout
+        );
+
+        const changes = this.normalizeWorkspaceEdit(result);
+        if (changes) {
+          for (const [uri, edits] of Object.entries(changes)) {
+            if (!mergedChanges[uri]) {
+              mergedChanges[uri] = [];
+            }
+            mergedChanges[uri].push(...edits);
+          }
+        }
+      } catch (error) {
+        warnings.push(
+          `Failed to get import updates from ${serverState.config.command[0]}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+
+    const hasImportChanges = Object.keys(mergedChanges).length > 0;
+
+    if (dryRun) {
+      return {
+        moved: false,
+        importChanges: hasImportChanges ? mergedChanges : null,
+        warnings,
+      };
+    }
+
+    // Apply import edits while old file still exists (so servers can resolve)
+    if (hasImportChanges) {
+      const editResult = await applyWorkspaceEdit({ changes: mergedChanges }, { lspClient: this });
+      if (!editResult.success) {
+        throw new Error(`Failed to apply import updates: ${editResult.error}`);
+      }
+      process.stderr.write(
+        `[DEBUG moveFile] Applied import edits to ${editResult.filesModified.length} file(s)\n`
+      );
+    }
+
+    // Create destination directory if needed
+    const destDir = dirname(destinationPath);
+    if (!existsSync(destDir)) {
+      mkdirSync(destDir, { recursive: true });
+    }
+
+    // Move the file
+    renameSync(sourcePath, destinationPath);
+    process.stderr.write('[DEBUG moveFile] File moved on disk\n');
+
+    // Update LSP state: close old file, open new file
+    for (const serverState of this.servers.values()) {
+      if (serverState.openFiles.has(sourcePath)) {
+        this.sendNotification(serverState.process, 'textDocument/didClose', {
+          textDocument: { uri: oldUri },
+        });
+        serverState.openFiles.delete(sourcePath);
+        serverState.fileVersions.delete(sourcePath);
+        serverState.diagnostics.delete(oldUri);
+        serverState.lastDiagnosticUpdate.delete(oldUri);
+        serverState.diagnosticVersions.delete(oldUri);
+      }
+    }
+
+    // Notify all supporting servers about the rename
+    for (const serverState of this.servers.values()) {
+      const caps = serverState.serverCapabilities?.workspace as
+        | { fileOperations?: { didRename?: unknown } }
+        | undefined;
+      if (caps?.fileOperations?.didRename) {
+        this.sendNotification(serverState.process, 'workspace/didRenameFiles', renameParams);
+      }
+    }
+
+    // Open the file at its new location in the appropriate server
+    try {
+      const serverState = await this.getServer(destinationPath);
+      await this.ensureFileOpen(serverState, destinationPath);
+    } catch {
+      // No server handles the new file extension — that's fine
+    }
+
+    return {
+      moved: true,
+      importChanges: hasImportChanges ? mergedChanges : null,
+      warnings,
+    };
   }
 
   async getDocumentSymbols(filePath: string): Promise<DocumentSymbol[] | SymbolInformation[]> {
