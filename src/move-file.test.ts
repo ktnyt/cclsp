@@ -272,6 +272,10 @@ describe('moveFile', () => {
       serversMap.set('mock-key', mockServerState);
       (client as any).servers = serversMap;
 
+      // Mock getServer and ensureFileOpen to avoid starting real LSP server
+      const getServerSpy = spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      const ensureFileOpenSpy = spyOn(client as any, 'ensureFileOpen').mockResolvedValue(false);
+
       // Mock sendRequest to return workspace edit
       const sendRequestSpy = spyOn(client as any, 'sendRequest').mockResolvedValue({
         changes: {
@@ -301,6 +305,8 @@ describe('moveFile', () => {
         45000
       );
 
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
       sendRequestSpy.mockRestore();
       sendNotificationSpy.mockRestore();
       client.dispose();
@@ -340,11 +346,17 @@ describe('moveFile', () => {
       serversMap.set('mock-key', mockServerState);
       (client as any).servers = serversMap;
 
+      // Mock getServer and ensureFileOpen to avoid starting real LSP server
+      const getServerSpy = spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      const ensureFileOpenSpy = spyOn(client as any, 'ensureFileOpen').mockResolvedValue(false);
+
       const result = await client.moveFile(sourcePath, destPath, true);
 
       expect(result.warnings).toHaveLength(1);
       expect(result.warnings[0]).toContain('does not support willRenameFiles');
 
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
       client.dispose();
     });
 
@@ -386,6 +398,10 @@ describe('moveFile', () => {
       serversMap.set('mock-key', mockServerState);
       (client as any).servers = serversMap;
 
+      // Mock getServer and ensureFileOpen to avoid starting real LSP server
+      const getServerSpy = spyOn(client as any, 'getServer').mockResolvedValue(mockServerState);
+      const ensureFileOpenSpy = spyOn(client as any, 'ensureFileOpen').mockResolvedValue(false);
+
       // Mock sendRequest to throw error
       const sendRequestSpy = spyOn(client as any, 'sendRequest').mockRejectedValue(
         new Error('Server timeout')
@@ -397,6 +413,8 @@ describe('moveFile', () => {
       expect(result.warnings[0]).toContain('Failed to get import updates');
       expect(result.warnings[0]).toContain('Server timeout');
 
+      getServerSpy.mockRestore();
+      ensureFileOpenSpy.mockRestore();
       sendRequestSpy.mockRestore();
       client.dispose();
     });

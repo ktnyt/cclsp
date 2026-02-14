@@ -360,27 +360,14 @@ export class LSPClient {
     }
 
     // Send the initialized notification after receiving the initialize response
+    // Per LSP spec, the server is ready after client sends initialized notification
     await this.sendNotification(childProcess, 'initialized', {});
 
-    // Wait for the server to send the initialized notification back with timeout
-    const INITIALIZATION_TIMEOUT = 3000; // 3 seconds
-    try {
-      await Promise.race([
-        initializationPromise,
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Initialization timeout')), INITIALIZATION_TIMEOUT)
-        ),
-      ]);
-    } catch (error) {
-      // If timeout or initialization fails, mark as initialized anyway
-      process.stderr.write(
-        `[DEBUG startServer] Initialization timeout or failed for ${serverConfig.command.join(' ')}, proceeding anyway: ${error}\n`
-      );
-      serverState.initialized = true;
-      if (serverState.initializationResolve) {
-        serverState.initializationResolve();
-        serverState.initializationResolve = undefined;
-      }
+    // Mark server as initialized - no response expected from initialized notification
+    serverState.initialized = true;
+    if (serverState.initializationResolve) {
+      serverState.initializationResolve();
+      serverState.initializationResolve = undefined;
     }
 
     // Set up auto-restart timer if configured
@@ -437,18 +424,7 @@ export class LSPClient {
       }
 
       // Standard LSP message handling
-      if (message.method === 'initialized') {
-        process.stderr.write(
-          '[DEBUG handleMessage] Received initialized notification from server\n'
-        );
-        serverState.initialized = true;
-        // Resolve the initialization promise
-        const resolve = serverState.initializationResolve;
-        if (resolve) {
-          resolve();
-          serverState.initializationResolve = undefined;
-        }
-      } else if (message.method === 'textDocument/publishDiagnostics') {
+      if (message.method === 'textDocument/publishDiagnostics') {
         // Handle diagnostic notifications from the server
         const params = message.params as {
           uri: string;
@@ -1150,6 +1126,14 @@ export class LSPClient {
     const oldUri = pathToUri(sourcePath);
     const newUri = pathToUri(destinationPath);
     const renameParams = { files: [{ oldUri, newUri }] };
+
+    // Ensure source file is open so LSP server can resolve its import graph
+    try {
+      const serverState = await this.getServer(sourcePath);
+      await this.ensureFileOpen(serverState, sourcePath);
+    } catch {
+      // No server for this file type - proceed anyway
+    }
 
     // Collect workspace edits from all servers that support willRenameFiles
     const mergedChanges: Record<
