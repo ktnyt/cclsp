@@ -1437,16 +1437,28 @@ export class LSPClient {
    * Wait for LSP server to become idle after a change.
    * Uses multiple heuristics to determine when diagnostics are likely complete.
    */
+  private get diagnosticMaxWaitMs(): number {
+    return this.config.diagnostics?.maxWaitMs ?? 2000;
+  }
+
+  private get diagnosticIdleMs(): number {
+    return this.config.diagnostics?.idleMs ?? 200;
+  }
+
   private async waitForDiagnosticsIdle(
     serverState: ServerState,
     fileUri: string,
     options: {
-      maxWaitTime?: number; // Maximum time to wait in ms (default: 1000)
-      idleTime?: number; // Time without updates to consider idle in ms (default: 100)
+      maxWaitTime?: number;
+      idleTime?: number;
       checkInterval?: number; // How often to check for updates in ms (default: 50)
     } = {}
   ): Promise<void> {
-    const { maxWaitTime = 1000, idleTime = 100, checkInterval = 50 } = options;
+    const {
+      maxWaitTime = this.diagnosticMaxWaitMs,
+      idleTime = this.diagnosticIdleMs,
+      checkInterval = 50,
+    } = options;
 
     const startTime = Date.now();
     let lastVersion = serverState.diagnosticVersions.get(fileUri) ?? -1;
@@ -1503,10 +1515,18 @@ export class LSPClient {
     const cachedDiagnostics = serverState.diagnostics.get(fileUri);
 
     if (cachedDiagnostics !== undefined) {
+      // Wait for any in-flight diagnostic updates to settle before returning.
+      // Without this, edits made just before calling getDiagnostics return
+      // stale cached results because rust-analyzer hasn't re-analyzed yet.
       process.stderr.write(
-        `[DEBUG getDiagnostics] Returning ${cachedDiagnostics.length} cached diagnostics from publishDiagnostics\n`
+        `[DEBUG getDiagnostics] Found ${cachedDiagnostics.length} cached diagnostics, waiting for updates to settle...\n`
       );
-      return cachedDiagnostics;
+      await this.waitForDiagnosticsIdle(serverState, fileUri);
+      const freshDiagnostics = serverState.diagnostics.get(fileUri);
+      process.stderr.write(
+        `[DEBUG getDiagnostics] Returning ${(freshDiagnostics || []).length} diagnostics after waiting\n`
+      );
+      return freshDiagnostics || cachedDiagnostics;
     }
 
     // If no cached diagnostics, try the pull-based textDocument/diagnostic
@@ -1552,8 +1572,8 @@ export class LSPClient {
       // Wait for the server to become idle and publish diagnostics
       // MCP tools can afford longer wait times for better reliability
       await this.waitForDiagnosticsIdle(serverState, fileUri, {
-        maxWaitTime: 5000, // 5 seconds - generous timeout for MCP usage
-        idleTime: 300, // 300ms idle time to ensure all diagnostics are received
+        maxWaitTime: this.diagnosticMaxWaitMs * 5, // 5x base timeout for fallback path
+        idleTime: this.diagnosticIdleMs * 2.5, // longer idle for reliability
       });
 
       // Check again for cached diagnostics
@@ -1610,8 +1630,8 @@ export class LSPClient {
         // Wait for the server to process the changes and become idle
         // After making changes, servers may need time to re-analyze
         await this.waitForDiagnosticsIdle(serverState, fileUri, {
-          maxWaitTime: 3000, // 3 seconds after triggering changes
-          idleTime: 300, // Consistent idle time for reliability
+          maxWaitTime: this.diagnosticMaxWaitMs * 4, // 4x base timeout after triggering changes
+          idleTime: this.diagnosticIdleMs * 2.5, // longer idle for reliability
         });
 
         // Check one more time

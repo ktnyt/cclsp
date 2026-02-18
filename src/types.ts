@@ -6,8 +6,14 @@ export interface LSPServerConfig {
   initializationOptions?: unknown; // LSP initialization options
 }
 
+export interface DiagnosticsConfig {
+  maxWaitMs?: number; // Maximum time to wait for diagnostics in ms (default: 2000)
+  idleMs?: number; // Time without updates to consider idle in ms (default: 200)
+}
+
 export interface Config {
   servers: LSPServerConfig[];
+  diagnostics?: DiagnosticsConfig;
 }
 
 export interface Position {
