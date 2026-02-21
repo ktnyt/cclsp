@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
@@ -10,12 +10,27 @@ const TEST_DIR = process.env.RUNNER_TEMP
 const TEST_CONFIG_PATH = join(TEST_DIR, 'test-config.json');
 
 describe('LSPClient server selection', () => {
+  let savedConfigPath: string | undefined;
+
   beforeEach(() => {
+    // Save and clear CCLSP_CONFIG_PATH so tests use their own config files
+    savedConfigPath = process.env.CCLSP_CONFIG_PATH;
+    process.env.CCLSP_CONFIG_PATH = '';
+
     // Clean up test directory
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
     mkdirSync(TEST_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    // Restore CCLSP_CONFIG_PATH
+    if (savedConfigPath !== undefined) {
+      process.env.CCLSP_CONFIG_PATH = savedConfigPath;
+    } else {
+      process.env.CCLSP_CONFIG_PATH = '';
+    }
   });
 
   it('should select single matching server', () => {
