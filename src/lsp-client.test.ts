@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
+import * as operations from './lsp/operations.js';
 import { pathToUri, uriToPath } from './utils.js';
 
 // Type for accessing private methods in tests
@@ -331,7 +332,17 @@ describe('LSPClient', () => {
         },
       ];
 
-      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        transport: createMockTransport(),
+        initialized: true,
+        documentManager: createMockDocumentManager(),
+      };
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+      const getDocumentSymbolsSpy = spyOn(operations, 'getDocumentSymbols').mockResolvedValue(
         mockSymbols
       );
 
@@ -347,6 +358,7 @@ describe('LSPClient', () => {
       );
 
       getDocumentSymbolsSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should return multiple fallback results of different kinds', async () => {
@@ -392,7 +404,17 @@ describe('LSPClient', () => {
         },
       ];
 
-      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        transport: createMockTransport(),
+        initialized: true,
+        documentManager: createMockDocumentManager(),
+      };
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+      const getDocumentSymbolsSpy = spyOn(operations, 'getDocumentSymbols').mockResolvedValue(
         mockSymbols
       );
 
@@ -406,6 +428,7 @@ describe('LSPClient', () => {
       );
 
       getDocumentSymbolsSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should not trigger fallback when correct symbol kind is found', async () => {
@@ -438,7 +461,17 @@ describe('LSPClient', () => {
         },
       ];
 
-      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        transport: createMockTransport(),
+        initialized: true,
+        documentManager: createMockDocumentManager(),
+      };
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+      const getDocumentSymbolsSpy = spyOn(operations, 'getDocumentSymbols').mockResolvedValue(
         mockSymbols
       );
 
@@ -450,6 +483,7 @@ describe('LSPClient', () => {
       expect(result.warning).toBeUndefined(); // No warning expected
 
       getDocumentSymbolsSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should return empty results when no symbols found even with fallback', async () => {
@@ -470,7 +504,17 @@ describe('LSPClient', () => {
         },
       ];
 
-      const getDocumentSymbolsSpy = spyOn(client, 'getDocumentSymbols').mockResolvedValue(
+      const mockServerState = {
+        initializationPromise: Promise.resolve(),
+        transport: createMockTransport(),
+        initialized: true,
+        documentManager: createMockDocumentManager(),
+      };
+      const getServerSpy = spyOn(
+        client as unknown as LSPClientInternal,
+        'getServer'
+      ).mockResolvedValue(mockServerState);
+      const getDocumentSymbolsSpy = spyOn(operations, 'getDocumentSymbols').mockResolvedValue(
         mockSymbols
       );
 
@@ -481,6 +525,7 @@ describe('LSPClient', () => {
       expect(result.warning).toBeUndefined(); // No fallback triggered since no name matches found
 
       getDocumentSymbolsSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
   });
 
