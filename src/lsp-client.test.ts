@@ -10,8 +10,22 @@ type LSPClientInternal = {
   startServer: (config: unknown) => Promise<unknown>;
   getServer: (filePath: string) => Promise<{ initializationPromise: Promise<void> }>;
   ensureFileOpen: (filePath: string) => Promise<void>;
-  sendRequest: (method: string, params: unknown) => Promise<unknown>;
 };
+
+/** Create a mock transport for test server states */
+function createMockTransport(
+  overrides?: Partial<{
+    sendRequest: (...args: unknown[]) => Promise<unknown>;
+    sendNotification: (...args: unknown[]) => void;
+    sendMessage: (...args: unknown[]) => void;
+  }>
+) {
+  return {
+    sendRequest: overrides?.sendRequest ?? jest.fn().mockResolvedValue(undefined),
+    sendNotification: overrides?.sendNotification ?? jest.fn(),
+    sendMessage: overrides?.sendMessage ?? jest.fn(),
+  };
+}
 
 const TEST_DIR = process.env.RUNNER_TEMP
   ? `${process.env.RUNNER_TEMP}/cclsp-test`
@@ -196,10 +210,15 @@ describe('LSPClient', () => {
         initResolve = resolve;
       });
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue([]),
+      });
+
       // Mock getServer to return a server state with our controlled promise
       const mockServerState = {
         initializationPromise: initPromise,
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: false,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -218,12 +237,6 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      // Mock sendRequest to avoid actual LSP communication
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue([]);
-
       // Start first call (should wait)
       const firstCallPromise = client.findDefinition('test.ts', {
         line: 0,
@@ -240,11 +253,10 @@ describe('LSPClient', () => {
       await firstCallPromise;
 
       // Verify call was made
-      expect(sendRequestSpy).toHaveBeenCalled();
+      expect(mockTransport.sendRequest).toHaveBeenCalled();
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should handle multiple concurrent calls waiting for initialization', async () => {
@@ -255,9 +267,14 @@ describe('LSPClient', () => {
         initResolve = resolve;
       });
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue([]),
+      });
+
       const mockServerState = {
         initializationPromise: initPromise,
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: false,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -274,11 +291,6 @@ describe('LSPClient', () => {
         client as unknown as LSPClientInternal,
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
-
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue([]);
 
       // Start multiple concurrent calls
       const promises = [
@@ -298,11 +310,10 @@ describe('LSPClient', () => {
       expect(results).toHaveLength(3);
 
       // Each method should have been called once
-      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
+      expect(mockTransport.sendRequest).toHaveBeenCalledTimes(3);
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -315,14 +326,26 @@ describe('LSPClient', () => {
         {
           name: 'testFunction',
           kind: 12, // Function
-          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
-          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 21 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 2, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 9 },
+            end: { line: 0, character: 21 },
+          },
         },
         {
           name: 'testVariable',
           kind: 13, // Variable
-          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 20 } },
-          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 18 } },
+          range: {
+            start: { line: 3, character: 0 },
+            end: { line: 3, character: 20 },
+          },
+          selectionRange: {
+            start: { line: 3, character: 6 },
+            end: { line: 3, character: 18 },
+          },
         },
       ];
 
@@ -352,20 +375,38 @@ describe('LSPClient', () => {
         {
           name: 'test',
           kind: 12, // Function
-          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
-          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 13 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 2, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 9 },
+            end: { line: 0, character: 13 },
+          },
         },
         {
           name: 'test',
           kind: 13, // Variable
-          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 15 } },
-          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 10 } },
+          range: {
+            start: { line: 3, character: 0 },
+            end: { line: 3, character: 15 },
+          },
+          selectionRange: {
+            start: { line: 3, character: 6 },
+            end: { line: 3, character: 10 },
+          },
         },
         {
           name: 'test',
           kind: 5, // Class
-          range: { start: { line: 5, character: 0 }, end: { line: 10, character: 1 } },
-          selectionRange: { start: { line: 5, character: 6 }, end: { line: 5, character: 10 } },
+          range: {
+            start: { line: 5, character: 0 },
+            end: { line: 10, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 5, character: 6 },
+            end: { line: 5, character: 10 },
+          },
         },
       ];
 
@@ -392,14 +433,26 @@ describe('LSPClient', () => {
         {
           name: 'testFunction',
           kind: 12, // Function
-          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
-          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 21 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 2, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 9 },
+            end: { line: 0, character: 21 },
+          },
         },
         {
           name: 'testVariable',
           kind: 13, // Variable
-          range: { start: { line: 3, character: 0 }, end: { line: 3, character: 20 } },
-          selectionRange: { start: { line: 3, character: 6 }, end: { line: 3, character: 18 } },
+          range: {
+            start: { line: 3, character: 0 },
+            end: { line: 3, character: 20 },
+          },
+          selectionRange: {
+            start: { line: 3, character: 6 },
+            end: { line: 3, character: 18 },
+          },
         },
       ];
 
@@ -424,8 +477,14 @@ describe('LSPClient', () => {
         {
           name: 'otherFunction',
           kind: 12, // Function
-          range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } },
-          selectionRange: { start: { line: 0, character: 9 }, end: { line: 0, character: 22 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 2, character: 1 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 9 },
+            end: { line: 0, character: 22 },
+          },
         },
       ];
 
@@ -767,9 +826,17 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue({
+          kind: 'full',
+          items: mockDiagnostics,
+        }),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -787,36 +854,31 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue({
-        kind: 'full',
-        items: mockDiagnostics,
-      });
-
       const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual(mockDiagnostics);
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
-        'textDocument/diagnostic',
-        {
-          textDocument: { uri: pathToUri('/test.ts') },
-        }
-      );
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith('textDocument/diagnostic', {
+        textDocument: { uri: pathToUri('/test.ts') },
+      });
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array for unchanged report', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue({
+          kind: 'unchanged',
+          resultId: 'test-result-id',
+        }),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -833,14 +895,6 @@ describe('LSPClient', () => {
         client as unknown as LSPClientInternal,
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
-
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue({
-        kind: 'unchanged',
-        resultId: 'test-result-id',
-      });
 
       const result = await client.getDiagnostics('/test.ts');
 
@@ -848,7 +902,6 @@ describe('LSPClient', () => {
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return cached diagnostics from publishDiagnostics', async () => {
@@ -898,9 +951,14 @@ describe('LSPClient', () => {
     it('should handle server not supporting textDocument/diagnostic', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockRejectedValue(new Error('Method not found')),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -917,11 +975,6 @@ describe('LSPClient', () => {
         client as unknown as LSPClientInternal,
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
-
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockRejectedValue(new Error('Method not found'));
 
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
 
@@ -934,16 +987,20 @@ describe('LSPClient', () => {
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
       stderrSpy.mockRestore();
     });
 
     it('should handle unexpected response format', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue({ unexpected: 'response' }),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         diagnostics: new Map(),
@@ -961,18 +1018,12 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue({ unexpected: 'response' });
-
       const result = await client.getDiagnostics('/test.ts');
 
       expect(result).toEqual([]);
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -988,9 +1039,14 @@ describe('LSPClient', () => {
         },
       };
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockHoverResult),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1006,16 +1062,10 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockHoverResult);
-
       const result = await client.hover('/test.ts', { line: 0, character: 5 });
 
       expect(result).toEqual(mockHoverResult);
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/hover',
         {
           textDocument: { uri: pathToUri('/test.ts') },
@@ -1026,15 +1076,19 @@ describe('LSPClient', () => {
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return null when no hover information available', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1050,18 +1104,12 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
       const result = await client.hover('/test.ts', { line: 0, character: 5 });
 
       expect(result).toBeNull();
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -1094,9 +1142,14 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockSymbols),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
@@ -1104,22 +1157,14 @@ describe('LSPClient', () => {
       // Mock servers map
       (client as any).servers = new Map([['test-key', mockServerState]]);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockSymbols);
-
       const result = await client.workspaceSymbol('test');
 
       expect(result).toEqual(mockSymbols);
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'workspace/symbol',
         { query: 'test' },
         30000
       );
-
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array when no servers running', async () => {
@@ -1136,25 +1181,23 @@ describe('LSPClient', () => {
     it('should return empty array when result is not an array', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
 
       (client as any).servers = new Map([['test-key', mockServerState]]);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
       const result = await client.workspaceSymbol('test');
 
       expect(result).toEqual([]);
-
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -1179,9 +1222,14 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockLocations),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1197,16 +1245,13 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockLocations);
-
-      const result = await client.findImplementation('/test.ts', { line: 0, character: 5 });
+      const result = await client.findImplementation('/test.ts', {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual(mockLocations);
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/implementation',
         {
           textDocument: { uri: pathToUri('/test.ts') },
@@ -1217,7 +1262,6 @@ describe('LSPClient', () => {
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return single location when result is object', async () => {
@@ -1231,9 +1275,14 @@ describe('LSPClient', () => {
         },
       };
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockLocation),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1249,26 +1298,28 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockLocation);
-
-      const result = await client.findImplementation('/test.ts', { line: 0, character: 5 });
+      const result = await client.findImplementation('/test.ts', {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual([mockLocation]);
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array when no implementations found', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1284,18 +1335,15 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
-      const result = await client.findImplementation('/test.ts', { line: 0, character: 5 });
+      const result = await client.findImplementation('/test.ts', {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual([]);
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -1319,9 +1367,14 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockItems),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1337,16 +1390,13 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockItems);
-
-      const result = await client.prepareCallHierarchy('/test.ts', { line: 0, character: 5 });
+      const result = await client.prepareCallHierarchy('/test.ts', {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual(mockItems);
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/prepareCallHierarchy',
         {
           textDocument: { uri: pathToUri('/test.ts') },
@@ -1357,15 +1407,19 @@ describe('LSPClient', () => {
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array when no items found', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         openFiles: new Set(),
         adapter: undefined,
@@ -1381,18 +1435,15 @@ describe('LSPClient', () => {
         'ensureFileOpen'
       ).mockResolvedValue(undefined);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
-      const result = await client.prepareCallHierarchy('/test.ts', { line: 0, character: 5 });
+      const result = await client.prepareCallHierarchy('/test.ts', {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual([]);
 
       getServerSpy.mockRestore();
       ensureFileOpenSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -1438,9 +1489,14 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockIncomingCalls),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
@@ -1450,24 +1506,17 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockIncomingCalls);
-
       const result = await client.incomingCalls(mockItem);
 
       expect(result).toEqual(mockIncomingCalls);
       expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'callHierarchy/incomingCalls',
         { item: mockItem },
         30000
       );
 
       getServerSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array when no incoming calls', async () => {
@@ -1487,9 +1536,14 @@ describe('LSPClient', () => {
         },
       };
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
@@ -1499,18 +1553,12 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
       const result = await client.incomingCalls(mockItem);
 
       expect(result).toEqual([]);
       expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
 
       getServerSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 
@@ -1556,9 +1604,14 @@ describe('LSPClient', () => {
         },
       ];
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(mockOutgoingCalls),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
@@ -1568,24 +1621,17 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(mockOutgoingCalls);
-
       const result = await client.outgoingCalls(mockItem);
 
       expect(result).toEqual(mockOutgoingCalls);
       expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        mockServerState.process,
+      expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'callHierarchy/outgoingCalls',
         { item: mockItem },
         30000
       );
 
       getServerSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
 
     it('should return empty array when no outgoing calls', async () => {
@@ -1605,9 +1651,14 @@ describe('LSPClient', () => {
         },
       };
 
+      const mockTransport = createMockTransport({
+        sendRequest: jest.fn().mockResolvedValue(null),
+      });
+
       const mockServerState = {
         initializationPromise: Promise.resolve(),
         process: { stdin: { write: jest.fn() } },
+        transport: mockTransport,
         initialized: true,
         adapter: undefined,
       };
@@ -1617,18 +1668,12 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const sendRequestSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'sendRequest'
-      ).mockResolvedValue(null);
-
       const result = await client.outgoingCalls(mockItem);
 
       expect(result).toEqual([]);
       expect(getServerSpy).toHaveBeenCalledWith(uriToPath(mockItem.uri));
 
       getServerSpy.mockRestore();
-      sendRequestSpy.mockRestore();
     });
   });
 });

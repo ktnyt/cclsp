@@ -31,6 +31,7 @@ export {
 
 import type { ChildProcess } from 'node:child_process';
 import type { Diagnostic, LSPError, LSPServerConfig } from '../types.js';
+import type { JsonRpcTransport } from './json-rpc.js';
 
 /**
  * JSON-RPC message format used for LSP communication.
@@ -50,6 +51,7 @@ export interface LSPMessage {
  */
 export interface ServerState {
   process: ChildProcess;
+  transport: JsonRpcTransport;
   initialized: boolean;
   initializationPromise: Promise<void>;
   openFiles: Set<string>;

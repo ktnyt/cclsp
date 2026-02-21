@@ -4,6 +4,7 @@ import { constants, access, readFile } from 'node:fs/promises';
 import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
+import { JsonRpcTransport } from './lsp/json-rpc.js';
 import type {
   CallHierarchyIncomingCall,
   CallHierarchyItem,
@@ -29,11 +30,6 @@ export class LSPClient {
   private config: Config;
   private servers: Map<string, ServerState> = new Map();
   private serversStarting: Map<string, Promise<ServerState>> = new Map();
-  private nextId = 1;
-  private pendingRequests: Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }
-  > = new Map();
 
   private isPylspServer(serverConfig: LSPServerConfig): boolean {
     return serverConfig.command.some((cmd) => cmd.includes('pylsp'));
@@ -179,8 +175,14 @@ export class LSPClient {
       );
     }
 
+    // Create transport with message handler for non-response messages
+    const transport = new JsonRpcTransport(childProcess, (message: LSPMessage) => {
+      this.handleMessage(message, serverState);
+    });
+
     const serverState: ServerState = {
       process: childProcess,
+      transport,
       initialized: false,
       initializationPromise,
       openFiles: new Set(),
@@ -196,38 +198,6 @@ export class LSPClient {
 
     // Store the resolve function to call when initialized notification is received
     serverState.initializationResolve = initializationResolve;
-
-    let buffer = '';
-    childProcess.stdout?.on('data', (data: Buffer) => {
-      buffer += data.toString();
-
-      while (buffer.includes('\r\n\r\n')) {
-        const headerEndIndex = buffer.indexOf('\r\n\r\n');
-        const headerPart = buffer.substring(0, headerEndIndex);
-        const contentLengthMatch = headerPart.match(/Content-Length: (\d+)/);
-
-        if (contentLengthMatch?.[1]) {
-          const contentLength = Number.parseInt(contentLengthMatch[1]);
-          const messageStart = headerEndIndex + 4;
-
-          if (buffer.length >= messageStart + contentLength) {
-            const messageContent = buffer.substring(messageStart, messageStart + contentLength);
-            buffer = buffer.substring(messageStart + contentLength);
-
-            try {
-              const message: LSPMessage = JSON.parse(messageContent);
-              this.handleMessage(message, serverState);
-            } catch (error) {
-              process.stderr.write(`Failed to parse LSP message: ${error}\n`);
-            }
-          } else {
-            break;
-          }
-        } else {
-          buffer = buffer.substring(headerEndIndex + 4);
-        }
-      }
-    });
 
     childProcess.stderr?.on('data', (data: Buffer) => {
       // Forward LSP server stderr directly to MCP stderr
@@ -321,10 +291,10 @@ export class LSPClient {
       };
     }
 
-    const initResult = await this.sendRequest(childProcess, 'initialize', initializeParams);
+    const initResult = await transport.sendRequest('initialize', initializeParams);
 
     // Send the initialized notification after receiving the initialize response
-    await this.sendNotification(childProcess, 'initialized', {});
+    transport.sendNotification('initialized', {});
 
     // Wait for the server to send the initialized notification back with timeout
     const INITIALIZATION_TIMEOUT = 3000; // 3 seconds
@@ -354,20 +324,8 @@ export class LSPClient {
   }
 
   private handleMessage(message: LSPMessage, serverState?: ServerState) {
-    if (message.id && this.pendingRequests.has(message.id)) {
-      const request = this.pendingRequests.get(message.id);
-      if (!request) return;
-      const { resolve, reject } = request;
-      this.pendingRequests.delete(message.id);
-
-      if (message.error) {
-        reject(new Error(message.error.message || 'LSP Error'));
-      } else {
-        resolve(message.result);
-      }
-    }
-
     // Handle notifications and requests from server
+    // (Response correlation is handled by JsonRpcTransport)
     if (message.method && serverState) {
       const { adapter } = serverState;
 
@@ -376,8 +334,8 @@ export class LSPClient {
         adapter
           .handleRequest(message.method, message.params, serverState)
           .then((result) => {
-            // Send response back to server
-            this.sendMessage(serverState.process, {
+            // Send response back to server via transport
+            serverState.transport.sendMessage({
               jsonrpc: '2.0',
               id: message.id,
               result,
@@ -431,56 +389,6 @@ export class LSPClient {
         }
       }
     }
-  }
-
-  private sendMessage(process: ChildProcess, message: LSPMessage): void {
-    const content = JSON.stringify(message);
-    const header = `Content-Length: ${Buffer.byteLength(content)}\r\n\r\n`;
-    process.stdin?.write(header + content);
-  }
-
-  private sendRequest(
-    process: ChildProcess,
-    method: string,
-    params: unknown,
-    timeout = 30000
-  ): Promise<unknown> {
-    const id = this.nextId++;
-    const message: LSPMessage = {
-      jsonrpc: '2.0',
-      id,
-      method,
-      params,
-    };
-
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(id);
-        reject(new Error(`LSP request timeout: ${method} (${timeout}ms)`));
-      }, timeout);
-
-      this.pendingRequests.set(id, {
-        resolve: (value: unknown) => {
-          clearTimeout(timeoutId);
-          resolve(value);
-        },
-        reject: (reason?: unknown) => {
-          clearTimeout(timeoutId);
-          reject(reason);
-        },
-      });
-
-      this.sendMessage(process, message);
-    });
-  }
-
-  private sendNotification(process: ChildProcess, method: string, params: unknown): void {
-    const message: LSPMessage = {
-      jsonrpc: '2.0',
-      method,
-      params,
-    };
-    this.sendMessage(process, message);
   }
 
   private setupRestartTimer(serverState: ServerState): void {
@@ -633,7 +541,7 @@ export class LSPClient {
       const version = (serverState.fileVersions.get(filePath) || 1) + 1;
       serverState.fileVersions.set(filePath, version);
 
-      await this.sendNotification(serverState.process, 'textDocument/didChange', {
+      serverState.transport.sendNotification('textDocument/didChange', {
         textDocument: {
           uri,
           version,
@@ -672,7 +580,7 @@ export class LSPClient {
         `[DEBUG ensureFileOpen] File content length: ${fileContent.length}, languageId: ${languageId}\n`
       );
 
-      await this.sendNotification(serverState.process, 'textDocument/didOpen', {
+      serverState.transport.sendNotification('textDocument/didOpen', {
         textDocument: {
           uri,
           languageId,
@@ -825,8 +733,7 @@ export class LSPClient {
     process.stderr.write('[DEBUG findDefinition] Sending textDocument/definition request\n');
     const method = 'textDocument/definition';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -901,8 +808,7 @@ export class LSPClient {
 
     const method = 'textDocument/references';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -958,8 +864,7 @@ export class LSPClient {
     process.stderr.write('[DEBUG renameSymbol] Sending textDocument/rename request\n');
     const method = 'textDocument/rename';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -1055,8 +960,7 @@ export class LSPClient {
     const method = 'textDocument/documentSymbol';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
 
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -1501,7 +1405,7 @@ export class LSPClient {
     );
 
     try {
-      const result = await this.sendRequest(serverState.process, 'textDocument/diagnostic', {
+      const result = await serverState.transport.sendRequest('textDocument/diagnostic', {
         textDocument: { uri: fileUri },
       });
 
@@ -1565,7 +1469,7 @@ export class LSPClient {
         const version1 = (serverState.fileVersions.get(filePath) || 1) + 1;
         serverState.fileVersions.set(filePath, version1);
 
-        await this.sendNotification(serverState.process, 'textDocument/didChange', {
+        serverState.transport.sendNotification('textDocument/didChange', {
           textDocument: {
             uri: fileUri,
             version: version1,
@@ -1581,7 +1485,7 @@ export class LSPClient {
         const version2 = version1 + 1;
         serverState.fileVersions.set(filePath, version2);
 
-        await this.sendNotification(serverState.process, 'textDocument/didChange', {
+        serverState.transport.sendNotification('textDocument/didChange', {
           textDocument: {
             uri: fileUri,
             version: version2,
@@ -1635,8 +1539,7 @@ export class LSPClient {
 
     const method = 'textDocument/hover';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -1672,7 +1575,7 @@ export class LSPClient {
 
     const method = 'workspace/symbol';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(serverState.process, method, { query }, timeout);
+    const result = await serverState.transport.sendRequest(method, { query }, timeout);
 
     if (Array.isArray(result)) {
       return result as SymbolInformation[];
@@ -1692,8 +1595,7 @@ export class LSPClient {
 
     const method = 'textDocument/implementation';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -1727,8 +1629,7 @@ export class LSPClient {
 
     const method = 'textDocument/prepareCallHierarchy';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(
-      serverState.process,
+    const result = await serverState.transport.sendRequest(
       method,
       {
         textDocument: { uri: pathToUri(filePath) },
@@ -1754,7 +1655,7 @@ export class LSPClient {
 
     const method = 'callHierarchy/incomingCalls';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(serverState.process, method, { item }, timeout);
+    const result = await serverState.transport.sendRequest(method, { item }, timeout);
 
     if (Array.isArray(result)) {
       return result as CallHierarchyIncomingCall[];
@@ -1773,7 +1674,7 @@ export class LSPClient {
 
     const method = 'callHierarchy/outgoingCalls';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
-    const result = await this.sendRequest(serverState.process, method, { item }, timeout);
+    const result = await serverState.transport.sendRequest(method, { item }, timeout);
 
     if (Array.isArray(result)) {
       return result as CallHierarchyOutgoingCall[];
