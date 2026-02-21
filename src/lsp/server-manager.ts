@@ -5,7 +5,13 @@ import { adapterRegistry } from './adapters/registry.js';
 import { DiagnosticsCache } from './diagnostics.js';
 import { DocumentManager } from './document-manager.js';
 import { JsonRpcTransport } from './json-rpc.js';
-import type { Diagnostic, LSPMessage, LSPServerConfig, ServerState } from './types.js';
+import type {
+  Diagnostic,
+  InitializeParams,
+  LSPMessage,
+  LSPServerConfig,
+  ServerState,
+} from './types.js';
 
 /**
  * Manages LSP server process lifecycles.
@@ -143,14 +149,7 @@ export class ServerManager {
     });
 
     // Initialize the server
-    const initializeParams: {
-      processId: number | null;
-      clientInfo: { name: string; version: string };
-      capabilities: unknown;
-      rootUri: string;
-      workspaceFolders: Array<{ uri: string; name: string }>;
-      initializationOptions?: unknown;
-    } = {
+    const initializeParams: InitializeParams = {
       processId: childProcess.pid || null,
       clientInfo: { name: 'cclsp', version: '0.1.0' },
       capabilities: {
@@ -229,7 +228,12 @@ export class ServerManager {
       };
     }
 
-    const initResult = await transport.sendRequest('initialize', initializeParams);
+    // Allow adapter to customize initialization parameters
+    const finalParams = adapter?.customizeInitializeParams
+      ? adapter.customizeInitializeParams(initializeParams)
+      : initializeParams;
+
+    const initResult = await transport.sendRequest('initialize', finalParams);
 
     // Send the initialized notification after receiving the initialize response
     transport.sendNotification('initialized', {});

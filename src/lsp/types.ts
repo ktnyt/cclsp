@@ -106,19 +106,6 @@ export interface ServerAdapter {
    * Return undefined to use the default timeout (30000ms).
    */
   getTimeout?(method: string): number | undefined;
-
-  /**
-   * Check if a method is actually supported.
-   * Some servers declare capabilities they don't properly implement.
-   * Return false to prevent the method from being called.
-   */
-  isMethodSupported?(method: string): boolean;
-
-  /**
-   * Provide fallback implementation when method is not supported.
-   * This is called when isMethodSupported returns false.
-   */
-  provideFallback?(method: string, params: unknown, state: ServerState): Promise<unknown>;
 }
 
 /**
