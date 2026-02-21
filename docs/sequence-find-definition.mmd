@@ -1,0 +1,59 @@
+%% Sequence Diagram: find_definition flow (CURRENT ARCHITECTURE)
+%%
+%% Shows the complete flow from MCP client request through symbol resolution
+%% to LSP server interaction and response formatting.
+%% All LSP logic lives in the single LSPClient class (lsp-client.ts).
+
+sequenceDiagram
+    participant MC as MCP Client
+    participant IT as index.ts<br/>CallToolRequestSchema
+    participant LC as LSPClient<br/>(lsp-client.ts)
+    participant LS as LSP Server Process
+
+    MC->>IT: CallToolRequest<br/>find_definition(file_path, symbol_name, symbol_kind)
+
+    Note over IT: resolve(file_path) to absolute path
+
+    IT->>LC: findSymbolsByName(absolutePath, symbolName, symbolKind)
+
+    Note over LC: getDocumentSymbols(filePath) internally
+
+    LC->>LC: getServer(filePath)
+
+    alt Server not running
+        LC->>LC: getServerForFile(filePath)<br/>match extension to config
+        LC->>LS: spawn(command, args)
+        Note over LC: adapterRegistry.getAdapter(config)
+        LC->>LS: sendRequest("initialize", params)<br/>via Content-Length + JSON-RPC
+        LS-->>LC: initialize result
+        LC->>LS: sendNotification("initialized", {})
+        Note over LC: Wait for initialized (3s timeout)
+        LC->>LC: setupRestartTimer()
+    else Server already running
+        Note over LC: Return existing ServerState
+    end
+
+    LC->>LC: ensureFileOpen(filePath)
+
+    alt File not yet open
+        LC->>LS: sendNotification("textDocument/didOpen", content)
+        Note over LC: Wait 200ms for server to index
+    end
+
+    LC->>LS: sendRequest("textDocument/documentSymbol")<br/>via Content-Length + JSON-RPC
+    LS-->>LC: DocumentSymbol[] response
+
+    Note over LC: flattenDocumentSymbols()<br/>match by name + kind<br/>fallback if kind not found
+
+    LC-->>IT: { matches: SymbolMatch[], warning? }
+
+    loop For each matching symbol
+        IT->>LC: findDefinition(absolutePath, match.position)
+        LC->>LC: ensureFileOpen + await initializationPromise
+        LC->>LS: sendRequest("textDocument/definition")<br/>timeout from adapter.getTimeout() or 30s default
+        LS-->>LC: Location[] response
+        LC-->>IT: Location[]
+        Note over IT: Format: uriToPath(uri):line+1:char+1
+    end
+
+    IT-->>MC: MCP Response<br/>{ content: [{ type: "text", text: results }] }

@@ -1,0 +1,97 @@
+%% Sequence Diagram: LSP Server Lifecycle (CURRENT ARCHITECTURE)
+%%
+%% Shows server start, auto-restart, manual restart, and dispose flows.
+%% Includes concurrency protection via serversStarting map.
+%% All lifecycle logic lives in the single LSPClient class (lsp-client.ts).
+
+sequenceDiagram
+    participant IT as index.ts
+    participant LC as LSPClient<br/>(lsp-client.ts)
+    participant AR as AdapterRegistry<br/>(adapters/registry.ts)
+    participant LS as LSP Server Process
+    participant FS as FileScanner<br/>(file-scanner.ts)
+
+    Note over IT,FS: === SERVER PRELOAD (on startup) ===
+
+    IT->>LC: preloadServers()
+    LC->>FS: loadGitignore(serverDir)
+    LC->>FS: scanDirectoryForExtensions(serverDir, 3)
+    FS-->>LC: Set of found extensions
+
+    loop For each server config with matching extensions
+        LC->>LC: startServer(serverConfig)
+        LC->>LS: spawn(command, args, { stdio: pipe })
+        LC->>AR: getAdapter(serverConfig)
+        AR-->>LC: adapter or undefined
+
+        LC->>LS: sendRequest("initialize", params)<br/>via Content-Length + JSON-RPC
+        LS-->>LC: InitializeResult
+        LC->>LS: sendNotification("initialized", {})
+
+        alt Server sends "initialized" notification
+            LS-->>LC: initialized notification
+            Note over LC: resolve initializationPromise
+        else Timeout after 3 seconds
+            Note over LC: Mark as initialized anyway
+        end
+
+        alt restartInterval configured
+            LC->>LC: setTimeout(restartServer, interval)
+            Note over LC: Timer stored in ServerState
+        end
+
+        Note over LC: Store in servers Map<br/>key = JSON.stringify(config)
+    end
+
+    Note over IT,FS: === CONCURRENT ACCESS PROTECTION ===
+
+    par Request A arrives
+        IT->>LC: findDefinition("file.ts", pos)
+        LC->>LC: getServer("file.ts")
+        Note over LC: Server not in servers Map<br/>Not in serversStarting Map
+        LC->>LC: startServer(config)
+        Note over LC: Store promise in serversStarting Map
+    and Request B arrives simultaneously
+        IT->>LC: findReferences("file.ts", pos)
+        LC->>LC: getServer("file.ts")
+        Note over LC: Found promise in serversStarting Map<br/>Await existing promise
+    end
+    Note over LC: Same ServerState returned to both<br/>Move from serversStarting to servers Map
+
+    Note over IT,FS: === AUTO-RESTART (timer-based) ===
+
+    Note over LC: restartInterval timer fires<br/>restartServer(serverState) called
+    LC->>LC: clearTimeout(restartTimer)
+    LC->>LS: process.kill()
+    LC->>LC: servers.delete(key)
+    LC->>LC: startServer(config)
+    LC->>LS: spawn new process
+    LC->>LS: sendRequest("initialize")
+    LS-->>LC: InitializeResult
+    Note over LC: New ServerState replaces old in servers Map
+
+    Note over IT,FS: === MANUAL RESTART ===
+
+    IT->>LC: restartServers(["ts", "tsx"])
+
+    loop For each server with matching extensions
+        LC->>LC: clearTimeout(restartTimer)
+        LC->>LS: process.kill()
+        LC->>LC: servers.delete(key)
+        LC->>LC: startServer(config)
+        LC->>LS: spawn new process
+    end
+
+    LC-->>IT: { success, restarted[], failed[], message }
+
+    Note over IT,FS: === DISPOSE (shutdown) ===
+
+    Note over IT: SIGINT or SIGTERM received
+    IT->>LC: dispose()
+
+    loop For each server in servers Map
+        LC->>LC: clearTimeout(restartTimer)
+        LC->>LS: process.kill()
+    end
+
+    LC->>LC: servers.clear()

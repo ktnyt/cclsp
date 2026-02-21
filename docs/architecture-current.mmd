@@ -1,0 +1,60 @@
+%% Current Architecture - Component Overview
+%%
+%% This diagram shows the current cclsp architecture with its key components,
+%% relationships, and the two "god files" that need decomposition.
+
+graph TB
+    subgraph "MCP Layer"
+        MCPClient["MCP Client<br/>(Claude Code)"]
+        IndexTS["index.ts<br/>(1202 lines)<br/>MCP Server + 12 Tool Handlers"]
+    end
+
+    subgraph "LSP Layer"
+        LSPClient["src/lsp-client.ts<br/>(1883 lines)<br/>LSPClient Monolith"]
+    end
+
+    subgraph "Adapter System"
+        Registry["src/lsp/adapters/registry.ts<br/>AdapterRegistry (singleton)"]
+        VueAdapter["src/lsp/adapters/vue.ts<br/>VueLanguageServerAdapter"]
+        PyrightAdapter["src/lsp/adapters/pyright.ts<br/>PyrightAdapter"]
+        AdapterTypes["src/lsp/adapters/types.ts<br/>ServerAdapter interface<br/>+ duplicated ServerState"]
+    end
+
+    subgraph "Support Modules"
+        FileEditor["src/file-editor.ts<br/>applyWorkspaceEdit()"]
+        FileScanner["src/file-scanner.ts<br/>scanDirectoryForExtensions()"]
+        Types["src/types.ts<br/>LSP Type Definitions"]
+        Utils["src/utils.ts<br/>pathToUri / uriToPath"]
+    end
+
+    subgraph "Setup System"
+        Setup["src/setup.ts<br/>Interactive CLI Wizard"]
+        LangServers["src/language-servers.ts<br/>17 Pre-configured Servers"]
+    end
+
+    subgraph "LSP Server Processes"
+        TSServer["typescript-language-server"]
+        PyServer["pylsp / pyright"]
+        GoServer["gopls"]
+        OtherServer["other LSP servers..."]
+    end
+
+    MCPClient -->|"JSON-RPC over stdio"| IndexTS
+    IndexTS -->|"delegates all operations"| LSPClient
+    IndexTS -->|"rename: apply edits"| FileEditor
+    LSPClient -->|"auto-detect adapter"| Registry
+    Registry --> VueAdapter
+    Registry --> PyrightAdapter
+    VueAdapter -.->|"implements"| AdapterTypes
+    PyrightAdapter -.->|"implements"| AdapterTypes
+    LSPClient -->|"spawn + JSON-RPC"| TSServer
+    LSPClient -->|"spawn + JSON-RPC"| PyServer
+    LSPClient -->|"spawn + JSON-RPC"| GoServer
+    LSPClient -->|"spawn + JSON-RPC"| OtherServer
+    LSPClient -->|"preload: scan dirs"| FileScanner
+    FileEditor -->|"sync after edit"| LSPClient
+    LSPClient --> Types
+    LSPClient --> Utils
+    IndexTS --> Utils
+    Setup --> FileScanner
+    Setup --> LangServers
