@@ -149,6 +149,40 @@ export class ServerManager {
       process.stderr.write(data);
     });
 
+    // Handle server process exit (intentional restarts already remove from servers map)
+    childProcess.on('exit', (code, signal) => {
+      const key = JSON.stringify(serverConfig);
+      const desc = serverConfig.command.join(' ');
+      const wasIntentional = !this.servers.has(key);
+
+      if (!wasIntentional) {
+        logger.warn(`LSP server exited unexpectedly: ${desc} (code: ${code}, signal: ${signal})\n`);
+      } else {
+        logger.debug(`LSP server exited: ${desc} (code: ${code}, signal: ${signal})\n`);
+      }
+
+      // Reject any pending requests so callers get errors instead of hanging
+      transport.rejectAllPending(`LSP server process exited (code: ${code}, signal: ${signal})`);
+
+      // Clean up state so next request triggers a fresh server start
+      // (no-op for intentional restarts since restartServer already deleted the key)
+      if (serverState.restartTimer) {
+        clearTimeout(serverState.restartTimer);
+        serverState.restartTimer = undefined;
+      }
+      this.servers.delete(key);
+    });
+
+    childProcess.on('error', (error) => {
+      const key = JSON.stringify(serverConfig);
+      const desc = serverConfig.command.join(' ');
+      logger.error(`LSP server process error: ${desc}: ${error}\n`);
+
+      // Reject pending requests and clean up so next request starts fresh
+      transport.rejectAllPending(`LSP server process error: ${error.message}`);
+      this.servers.delete(key);
+    });
+
     // Initialize the server
     const initializeParams: InitializeParams = {
       processId: childProcess.pid || null,

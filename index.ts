@@ -67,6 +67,15 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+// Prevent unhandled errors from crashing the MCP server process
+process.on('uncaughtException', (error) => {
+  logger.error(`Uncaught exception: ${error}\n`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error(`Unhandled rejection: ${reason}\n`);
+});
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

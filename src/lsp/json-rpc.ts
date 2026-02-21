@@ -142,6 +142,17 @@ export class JsonRpcTransport {
   }
 
   /**
+   * Reject all pending requests. Called when the server process exits unexpectedly.
+   */
+  rejectAllPending(reason: string): void {
+    const pending = [...this.pendingRequests.values()];
+    this.pendingRequests.clear();
+    for (const { reject } of pending) {
+      reject(new Error(reason));
+    }
+  }
+
+  /**
    * Send a JSON-RPC notification (no response expected).
    */
   sendNotification(method: string, params: unknown): void {
