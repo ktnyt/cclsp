@@ -14,39 +14,16 @@ import type {
   DocumentSymbol,
   LSPError,
   LSPLocation,
+  LSPMessage,
   LSPServerConfig,
   Location,
   Position,
+  ServerState,
   SymbolInformation,
   SymbolMatch,
-} from './types.js';
-import { SymbolKind } from './types.js';
+} from './lsp/types.js';
+import { SymbolKind } from './lsp/types.js';
 import { pathToUri, uriToPath } from './utils.js';
-
-interface LSPMessage {
-  jsonrpc: string;
-  id?: number;
-  method?: string;
-  params?: unknown;
-  result?: unknown;
-  error?: LSPError;
-}
-
-interface ServerState {
-  process: ChildProcess;
-  initialized: boolean;
-  initializationPromise: Promise<void>;
-  openFiles: Set<string>;
-  fileVersions: Map<string, number>; // Track file versions for didChange notifications
-  startTime: number;
-  config: LSPServerConfig;
-  restartTimer?: NodeJS.Timeout;
-  initializationResolve?: () => void;
-  diagnostics: Map<string, Diagnostic[]>; // Store diagnostics by file URI
-  lastDiagnosticUpdate: Map<string, number>; // Track last update time per file
-  diagnosticVersions: Map<string, number>; // Track diagnostic versions per file
-  adapter?: import('./lsp/adapters/types.js').ServerAdapter; // Optional adapter for server-specific behavior
-}
 
 export class LSPClient {
   private config: Config;
@@ -559,9 +536,12 @@ export class LSPClient {
    * @param extensions Array of file extensions, or null to restart all
    * @returns Object with success status and details about restarted servers
    */
-  async restartServers(
-    extensions?: string[]
-  ): Promise<{ success: boolean; restarted: string[]; failed: string[]; message: string }> {
+  async restartServers(extensions?: string[]): Promise<{
+    success: boolean;
+    restarted: string[];
+    failed: string[];
+    message: string;
+  }> {
     const restarted: string[] = [];
     const failed: string[] = [];
 
@@ -999,7 +979,10 @@ export class LSPClient {
         const workspaceEdit = result as {
           changes: Record<
             string,
-            Array<{ range: { start: Position; end: Position }; newText: string }>
+            Array<{
+              range: { start: Position; end: Position };
+              newText: string;
+            }>
           >;
         };
 
@@ -1016,7 +999,10 @@ export class LSPClient {
         const workspaceEdit = result as {
           documentChanges?: Array<{
             textDocument: { uri: string; version?: number };
-            edits: Array<{ range: { start: Position; end: Position }; newText: string }>;
+            edits: Array<{
+              range: { start: Position; end: Position };
+              newText: string;
+            }>;
           }>;
         };
 
