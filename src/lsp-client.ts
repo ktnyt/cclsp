@@ -5,6 +5,7 @@ import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
 import { loadConfig } from './lsp/config.js';
+import { DocumentManager } from './lsp/document-manager.js';
 import { JsonRpcTransport } from './lsp/json-rpc.js';
 import type {
   CallHierarchyIncomingCall,
@@ -138,13 +139,14 @@ export class LSPClient {
       this.handleMessage(message, serverState);
     });
 
+    const documentManager = new DocumentManager(transport);
+
     const serverState: ServerState = {
       process: childProcess,
       transport,
+      documentManager,
       initialized: false,
       initializationPromise,
-      openFiles: new Set(),
-      fileVersions: new Map(),
       startTime: Date.now(),
       config: serverConfig,
       restartTimer: undefined,
@@ -483,133 +485,23 @@ export class LSPClient {
       const serverState = await this.getServer(filePath);
 
       // If file is not already open in the LSP server, open it first
-      if (!serverState.openFiles.has(filePath)) {
+      if (!serverState.documentManager.isOpen(filePath)) {
         process.stderr.write(
           `[DEBUG syncFileContent] File not open, opening it first: ${filePath}\n`
         );
-        await this.ensureFileOpen(serverState, filePath);
+        await serverState.documentManager.ensureOpen(filePath);
       }
 
       process.stderr.write(`[DEBUG syncFileContent] Syncing file: ${filePath}\n`);
 
       const fileContent = readFileSync(filePath, 'utf-8');
-      const uri = pathToUri(filePath);
+      serverState.documentManager.sendChange(filePath, fileContent);
 
-      // Increment version and send didChange notification
-      const version = (serverState.fileVersions.get(filePath) || 1) + 1;
-      serverState.fileVersions.set(filePath, version);
-
-      serverState.transport.sendNotification('textDocument/didChange', {
-        textDocument: {
-          uri,
-          version,
-        },
-        contentChanges: [
-          {
-            text: fileContent,
-          },
-        ],
-      });
-
-      process.stderr.write(
-        `[DEBUG syncFileContent] File synced with version ${version}: ${filePath}\n`
-      );
+      process.stderr.write(`[DEBUG syncFileContent] File synced: ${filePath}\n`);
     } catch (error) {
       process.stderr.write(`[DEBUG syncFileContent] Failed to sync file ${filePath}: ${error}\n`);
       // Don't throw - syncing is best effort
     }
-  }
-
-  private async ensureFileOpen(serverState: ServerState, filePath: string): Promise<boolean> {
-    const wasAlreadyOpen = serverState.openFiles.has(filePath);
-    if (wasAlreadyOpen) {
-      process.stderr.write(`[DEBUG ensureFileOpen] File already open: ${filePath}\n`);
-      return false; // Return false to indicate file was already open
-    }
-
-    process.stderr.write(`[DEBUG ensureFileOpen] Opening file: ${filePath}\n`);
-
-    try {
-      const fileContent = readFileSync(filePath, 'utf-8');
-      const uri = pathToUri(filePath);
-      const languageId = this.getLanguageId(filePath);
-
-      process.stderr.write(
-        `[DEBUG ensureFileOpen] File content length: ${fileContent.length}, languageId: ${languageId}\n`
-      );
-
-      serverState.transport.sendNotification('textDocument/didOpen', {
-        textDocument: {
-          uri,
-          languageId,
-          version: 1,
-          text: fileContent,
-        },
-      });
-
-      serverState.openFiles.add(filePath);
-      serverState.fileVersions.set(filePath, 1);
-      process.stderr.write(`[DEBUG ensureFileOpen] File opened successfully: ${filePath}\n`);
-      return true; // Return true to indicate file was just opened
-    } catch (error) {
-      process.stderr.write(`[DEBUG ensureFileOpen] Failed to open file ${filePath}: ${error}\n`);
-      throw error;
-    }
-  }
-
-  private getLanguageId(filePath: string): string {
-    const extension = filePath.split('.').pop()?.toLowerCase();
-    const languageMap: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescriptreact',
-      js: 'javascript',
-      jsx: 'javascriptreact',
-      py: 'python',
-      go: 'go',
-      rs: 'rust',
-      c: 'c',
-      cpp: 'cpp',
-      h: 'c',
-      hpp: 'cpp',
-      java: 'java',
-      jar: 'java', // JAR files contain Java bytecode
-      class: 'java', // Java class files
-      cs: 'csharp',
-      php: 'php',
-      rb: 'ruby',
-      swift: 'swift',
-      kt: 'kotlin',
-      scala: 'scala',
-      dart: 'dart',
-      lua: 'lua',
-      sh: 'shellscript',
-      bash: 'shellscript',
-      json: 'json',
-      yaml: 'yaml',
-      yml: 'yaml',
-      xml: 'xml',
-      html: 'html',
-      css: 'css',
-      scss: 'scss',
-      vue: 'vue',
-      svelte: 'svelte',
-      tf: 'terraform',
-      sql: 'sql',
-      graphql: 'graphql',
-      gql: 'graphql',
-      md: 'markdown',
-      tex: 'latex',
-      elm: 'elm',
-      hs: 'haskell',
-      ml: 'ocaml',
-      clj: 'clojure',
-      fs: 'fsharp',
-      r: 'r',
-      toml: 'toml',
-      zig: 'zig',
-    };
-
-    return languageMap[extension || ''] || 'plaintext';
   }
 
   private async getServer(filePath: string): Promise<ServerState> {
@@ -674,7 +566,7 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    const wasJustOpened = await this.ensureFileOpen(serverState, filePath);
+    const wasJustOpened = await serverState.documentManager.ensureOpen(filePath);
 
     // If the file was just opened, give the LSP server time to index the project
     // This fixes issue #27 where the first find_references call returns incomplete results
@@ -746,7 +638,7 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    const wasJustOpened = await this.ensureFileOpen(serverState, filePath);
+    const wasJustOpened = await serverState.documentManager.ensureOpen(filePath);
 
     // If the file was just opened, give the LSP server time to index the project
     // This fixes issue #27 where the first find_references call returns incomplete results
@@ -817,7 +709,7 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     process.stderr.write('[DEBUG renameSymbol] Sending textDocument/rename request\n');
     const method = 'textDocument/rename';
@@ -910,7 +802,7 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     process.stderr.write(`[DEBUG] Requesting documentSymbol for: ${filePath}\n`);
 
@@ -1344,7 +1236,7 @@ export class LSPClient {
     await serverState.initializationPromise;
 
     // Ensure the file is opened and synced with the LSP server
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     // First, check if we have cached diagnostics from publishDiagnostics
     const fileUri = pathToUri(filePath);
@@ -1423,37 +1315,11 @@ export class LSPClient {
         const fileContent = readFileSync(filePath, 'utf-8');
 
         // Send a no-op change notification (add and remove a space at the end)
-        // Use proper version tracking instead of timestamps
-        const version1 = (serverState.fileVersions.get(filePath) || 1) + 1;
-        serverState.fileVersions.set(filePath, version1);
-
-        serverState.transport.sendNotification('textDocument/didChange', {
-          textDocument: {
-            uri: fileUri,
-            version: version1,
-          },
-          contentChanges: [
-            {
-              text: `${fileContent} `,
-            },
-          ],
-        });
+        // Use DocumentManager for proper version tracking
+        serverState.documentManager.sendChange(filePath, `${fileContent} `);
 
         // Immediately revert the change with next version
-        const version2 = version1 + 1;
-        serverState.fileVersions.set(filePath, version2);
-
-        serverState.transport.sendNotification('textDocument/didChange', {
-          textDocument: {
-            uri: fileUri,
-            version: version2,
-          },
-          contentChanges: [
-            {
-              text: fileContent,
-            },
-          ],
-        });
+        serverState.documentManager.sendChange(filePath, fileContent);
 
         // Wait for the server to process the changes and become idle
         // After making changes, servers may need time to re-analyze
@@ -1493,7 +1359,7 @@ export class LSPClient {
 
     const serverState = await this.getServer(filePath);
     await serverState.initializationPromise;
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     const method = 'textDocument/hover';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
@@ -1549,7 +1415,7 @@ export class LSPClient {
 
     const serverState = await this.getServer(filePath);
     await serverState.initializationPromise;
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     const method = 'textDocument/implementation';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
@@ -1583,7 +1449,7 @@ export class LSPClient {
 
     const serverState = await this.getServer(filePath);
     await serverState.initializationPromise;
-    await this.ensureFileOpen(serverState, filePath);
+    await serverState.documentManager.ensureOpen(filePath);
 
     const method = 'textDocument/prepareCallHierarchy';
     const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;

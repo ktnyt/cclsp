@@ -31,6 +31,7 @@ export {
 
 import type { ChildProcess } from 'node:child_process';
 import type { Diagnostic, LSPError, LSPServerConfig } from '../types.js';
+import type { DocumentManager } from './document-manager.js';
 import type { JsonRpcTransport } from './json-rpc.js';
 
 /**
@@ -52,10 +53,9 @@ export interface LSPMessage {
 export interface ServerState {
   process: ChildProcess;
   transport: JsonRpcTransport;
+  documentManager: DocumentManager;
   initialized: boolean;
   initializationPromise: Promise<void>;
-  openFiles: Set<string>;
-  fileVersions: Map<string, number>;
   startTime: number;
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
