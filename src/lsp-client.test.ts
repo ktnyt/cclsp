@@ -25,6 +25,16 @@ function createMockTransport(
   };
 }
 
+/** Create a mock DiagnosticsCache for test server states */
+function createMockDiagnosticsCache(initial?: Map<string, unknown[]>) {
+  const diagnostics = initial ?? new Map();
+  return {
+    get: jest.fn((uri: string) => diagnostics.get(uri)),
+    update: jest.fn(),
+    waitForIdle: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 /** Create a mock DocumentManager for test server states */
 function createMockDocumentManager() {
   return {
@@ -210,9 +220,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: false,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(
@@ -259,9 +267,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: false,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(
@@ -807,9 +813,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: true,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(
@@ -843,9 +847,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: true,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(
@@ -879,7 +881,9 @@ describe('LSPClient', () => {
         process: { stdin: { write: jest.fn() } },
         initialized: true,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map([[pathToUri('/test.ts'), mockDiagnostics]]),
+        diagnosticsCache: createMockDiagnosticsCache(
+          new Map([[pathToUri('/test.ts'), mockDiagnostics]])
+        ),
       };
 
       const getServerSpy = spyOn(
@@ -913,9 +917,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: true,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(
@@ -950,9 +952,7 @@ describe('LSPClient', () => {
         transport: mockTransport,
         initialized: true,
         documentManager: createMockDocumentManager(),
-        diagnostics: new Map(),
-        lastDiagnosticUpdate: new Map(),
-        diagnosticVersions: new Map(),
+        diagnosticsCache: createMockDiagnosticsCache(),
       };
 
       const getServerSpy = spyOn(

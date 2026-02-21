@@ -835,60 +835,6 @@ export class LSPClient {
     return { matches, warning: combinedWarning || undefined };
   }
 
-  /**
-   * Wait for LSP server to become idle after a change.
-   * Uses multiple heuristics to determine when diagnostics are likely complete.
-   */
-  private async waitForDiagnosticsIdle(
-    serverState: ServerState,
-    fileUri: string,
-    options: {
-      maxWaitTime?: number; // Maximum time to wait in ms (default: 1000)
-      idleTime?: number; // Time without updates to consider idle in ms (default: 100)
-      checkInterval?: number; // How often to check for updates in ms (default: 50)
-    } = {}
-  ): Promise<void> {
-    const { maxWaitTime = 1000, idleTime = 100, checkInterval = 50 } = options;
-
-    const startTime = Date.now();
-    let lastVersion = serverState.diagnosticVersions.get(fileUri) ?? -1;
-    let lastUpdateTime = serverState.lastDiagnosticUpdate.get(fileUri) ?? startTime;
-
-    process.stderr.write(
-      `[DEBUG waitForDiagnosticsIdle] Waiting for diagnostics to stabilize for ${fileUri}\n`
-    );
-
-    while (Date.now() - startTime < maxWaitTime) {
-      await new Promise((resolve) => setTimeout(resolve, checkInterval));
-
-      const currentVersion = serverState.diagnosticVersions.get(fileUri) ?? -1;
-      const currentUpdateTime = serverState.lastDiagnosticUpdate.get(fileUri) ?? lastUpdateTime;
-
-      // Check if version changed
-      if (currentVersion !== lastVersion) {
-        process.stderr.write(
-          `[DEBUG waitForDiagnosticsIdle] Version changed from ${lastVersion} to ${currentVersion}\n`
-        );
-        lastVersion = currentVersion;
-        lastUpdateTime = currentUpdateTime;
-        continue;
-      }
-
-      // Check if enough time has passed without updates
-      const timeSinceLastUpdate = Date.now() - currentUpdateTime;
-      if (timeSinceLastUpdate >= idleTime) {
-        process.stderr.write(
-          `[DEBUG waitForDiagnosticsIdle] Server appears idle after ${timeSinceLastUpdate}ms without updates\n`
-        );
-        return;
-      }
-    }
-
-    process.stderr.write(
-      `[DEBUG waitForDiagnosticsIdle] Max wait time reached (${maxWaitTime}ms)\n`
-    );
-  }
-
   async getDiagnostics(filePath: string): Promise<Diagnostic[]> {
     process.stderr.write(`[DEBUG getDiagnostics] Requesting diagnostics for ${filePath}\n`);
 
@@ -902,7 +848,7 @@ export class LSPClient {
 
     // First, check if we have cached diagnostics from publishDiagnostics
     const fileUri = pathToUri(filePath);
-    const cachedDiagnostics = serverState.diagnostics.get(fileUri);
+    const cachedDiagnostics = serverState.diagnosticsCache.get(fileUri);
 
     if (cachedDiagnostics !== undefined) {
       process.stderr.write(
@@ -953,13 +899,13 @@ export class LSPClient {
 
       // Wait for the server to become idle and publish diagnostics
       // MCP tools can afford longer wait times for better reliability
-      await this.waitForDiagnosticsIdle(serverState, fileUri, {
+      await serverState.diagnosticsCache.waitForIdle(fileUri, {
         maxWaitTime: 5000, // 5 seconds - generous timeout for MCP usage
         idleTime: 300, // 300ms idle time to ensure all diagnostics are received
       });
 
       // Check again for cached diagnostics
-      const diagnosticsAfterWait = serverState.diagnostics.get(fileUri);
+      const diagnosticsAfterWait = serverState.diagnosticsCache.get(fileUri);
       if (diagnosticsAfterWait !== undefined) {
         process.stderr.write(
           `[DEBUG getDiagnostics] Returning ${diagnosticsAfterWait.length} diagnostics after waiting for idle state\n`
@@ -985,13 +931,13 @@ export class LSPClient {
 
         // Wait for the server to process the changes and become idle
         // After making changes, servers may need time to re-analyze
-        await this.waitForDiagnosticsIdle(serverState, fileUri, {
+        await serverState.diagnosticsCache.waitForIdle(fileUri, {
           maxWaitTime: 3000, // 3 seconds after triggering changes
           idleTime: 300, // Consistent idle time for reliability
         });
 
         // Check one more time
-        const diagnosticsAfterTrigger = serverState.diagnostics.get(fileUri);
+        const diagnosticsAfterTrigger = serverState.diagnosticsCache.get(fileUri);
         if (diagnosticsAfterTrigger !== undefined) {
           process.stderr.write(
             `[DEBUG getDiagnostics] Returning ${diagnosticsAfterTrigger.length} diagnostics after triggering publishDiagnostics\n`

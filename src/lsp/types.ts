@@ -31,6 +31,7 @@ export {
 
 import type { ChildProcess } from 'node:child_process';
 import type { Diagnostic, LSPError, LSPServerConfig } from '../types.js';
+import type { DiagnosticsCache } from './diagnostics.js';
 import type { DocumentManager } from './document-manager.js';
 import type { JsonRpcTransport } from './json-rpc.js';
 
@@ -60,9 +61,7 @@ export interface ServerState {
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
   initializationResolve?: () => void;
-  diagnostics: Map<string, Diagnostic[]>;
-  lastDiagnosticUpdate: Map<string, number>;
-  diagnosticVersions: Map<string, number>;
+  diagnosticsCache: DiagnosticsCache;
   adapter?: ServerAdapter;
 }
 

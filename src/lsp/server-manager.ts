@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { pathToUri } from '../utils.js';
 import { adapterRegistry } from './adapters/registry.js';
+import { DiagnosticsCache } from './diagnostics.js';
 import { DocumentManager } from './document-manager.js';
 import { JsonRpcTransport } from './json-rpc.js';
 import type { Diagnostic, LSPMessage, LSPServerConfig, ServerState } from './types.js';
@@ -117,6 +118,7 @@ export class ServerManager {
     });
 
     const documentManager = new DocumentManager(transport);
+    const diagnosticsCache = new DiagnosticsCache();
 
     const serverState: ServerState = {
       process: childProcess,
@@ -127,9 +129,7 @@ export class ServerManager {
       startTime: Date.now(),
       config: serverConfig,
       restartTimer: undefined,
-      diagnostics: new Map(),
-      lastDiagnosticUpdate: new Map(),
-      diagnosticVersions: new Map(),
+      diagnosticsCache,
       adapter,
     };
 
@@ -318,11 +318,7 @@ export class ServerManager {
           process.stderr.write(
             `[DEBUG handleMessage] Received publishDiagnostics for ${params.uri} with ${params.diagnostics?.length || 0} diagnostics${params.version !== undefined ? ` (version: ${params.version})` : ''}\n`
           );
-          serverState.diagnostics.set(params.uri, params.diagnostics || []);
-          serverState.lastDiagnosticUpdate.set(params.uri, Date.now());
-          if (params.version !== undefined) {
-            serverState.diagnosticVersions.set(params.uri, params.version);
-          }
+          serverState.diagnosticsCache.update(params.uri, params.diagnostics || [], params.version);
         }
       }
     }
