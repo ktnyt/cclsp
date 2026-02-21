@@ -78,43 +78,27 @@ describe('LSPClient', () => {
   });
 
   it('should fail to create LSPClient when config file does not exist', () => {
-    const stderrSpy = spyOn(process.stderr, 'write');
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    expect(() => {
-      new LSPClient('/nonexistent/config.json');
-    }).toThrow('process.exit called');
-
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(stderrSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to load config from /nonexistent/config.json')
-    );
-
-    stderrSpy.mockRestore();
-    exitSpy.mockRestore();
+    const savedEnv = process.env.CCLSP_CONFIG_PATH;
+    process.env.CCLSP_CONFIG_PATH = undefined;
+    try {
+      expect(() => {
+        new LSPClient('/nonexistent/config.json');
+      }).toThrow('Failed to load config from /nonexistent/config.json');
+    } finally {
+      process.env.CCLSP_CONFIG_PATH = savedEnv;
+    }
   });
 
   it('should fail to create LSPClient when no configPath provided', () => {
-    const stderrSpy = spyOn(process.stderr, 'write');
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    expect(() => {
-      new LSPClient();
-    }).toThrow('process.exit called');
-
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(stderrSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'configPath is required when CCLSP_CONFIG_PATH environment variable is not set'
-      )
-    );
-
-    stderrSpy.mockRestore();
-    exitSpy.mockRestore();
+    const savedEnv = process.env.CCLSP_CONFIG_PATH;
+    process.env.CCLSP_CONFIG_PATH = undefined;
+    try {
+      expect(() => {
+        new LSPClient();
+      }).toThrow('configPath is required when CCLSP_CONFIG_PATH environment variable is not set');
+    } finally {
+      process.env.CCLSP_CONFIG_PATH = savedEnv;
+    }
   });
 
   it('should create LSPClient with valid config file', () => {

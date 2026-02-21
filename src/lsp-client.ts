@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { constants, access, readFile } from 'node:fs/promises';
 import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
 import { adapterRegistry } from './lsp/adapters/registry.js';
+import { loadConfig } from './lsp/config.js';
 import { JsonRpcTransport } from './lsp/json-rpc.js';
 import type {
   CallHierarchyIncomingCall,
@@ -36,50 +37,7 @@ export class LSPClient {
   }
 
   constructor(configPath?: string) {
-    // First try to load from environment variable (MCP config)
-    if (process.env.CCLSP_CONFIG_PATH) {
-      process.stderr.write(
-        `Loading config from CCLSP_CONFIG_PATH: ${process.env.CCLSP_CONFIG_PATH}\n`
-      );
-
-      if (!existsSync(process.env.CCLSP_CONFIG_PATH)) {
-        process.stderr.write(
-          `Config file specified in CCLSP_CONFIG_PATH does not exist: ${process.env.CCLSP_CONFIG_PATH}\n`
-        );
-        process.exit(1);
-      }
-
-      try {
-        const configData = readFileSync(process.env.CCLSP_CONFIG_PATH, 'utf-8');
-        this.config = JSON.parse(configData);
-        process.stderr.write(
-          `Loaded ${this.config.servers.length} server configurations from env\n`
-        );
-        return;
-      } catch (error) {
-        process.stderr.write(`Failed to load config from CCLSP_CONFIG_PATH: ${error}\n`);
-        process.exit(1);
-      }
-    }
-
-    // configPath must be provided if CCLSP_CONFIG_PATH is not set
-    if (!configPath) {
-      process.stderr.write(
-        'Error: configPath is required when CCLSP_CONFIG_PATH environment variable is not set\n'
-      );
-      process.exit(1);
-    }
-
-    // Try to load from config file
-    try {
-      process.stderr.write(`Loading config from file: ${configPath}\n`);
-      const configData = readFileSync(configPath, 'utf-8');
-      this.config = JSON.parse(configData);
-      process.stderr.write(`Loaded ${this.config.servers.length} server configurations\n`);
-    } catch (error) {
-      process.stderr.write(`Failed to load config from ${configPath}: ${error}\n`);
-      process.exit(1);
-    }
+    this.config = loadConfig(configPath);
   }
 
   private getServerForFile(filePath: string): LSPServerConfig | null {
