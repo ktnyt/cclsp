@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { logger } from '../logger.js';
 import { pathToUri } from '../utils.js';
+import { VERSION } from '../version.js';
 import { adapterRegistry } from './adapters/registry.js';
 import { DiagnosticsCache } from './diagnostics.js';
 import { DocumentManager } from './document-manager.js';
@@ -151,7 +152,7 @@ export class ServerManager {
     // Initialize the server
     const initializeParams: InitializeParams = {
       processId: childProcess.pid || null,
-      clientInfo: { name: 'cclsp', version: '0.1.0' },
+      clientInfo: { name: 'cclsp', version: VERSION },
       capabilities: {
         textDocument: {
           synchronization: {

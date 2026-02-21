@@ -11,6 +11,7 @@ import { refactoringTools } from './src/tools/refactoring.js';
 import { registerTools } from './src/tools/registry.js';
 import { serverTools } from './src/tools/server.js';
 import { symbolTools } from './src/tools/symbols.js';
+import { VERSION } from './src/version.js';
 
 // Handle subcommands
 const args = process.argv.slice(2);
@@ -36,7 +37,7 @@ const lspClient = new LSPClient();
 const server = new Server(
   {
     name: 'cclsp',
-    version: '0.1.0',
+    version: VERSION,
   },
   {
     capabilities: {
