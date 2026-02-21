@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { logger } from '../logger.js';
 import type { LSPMessage } from './types.js';
 
 /**
@@ -61,7 +62,7 @@ export class JsonRpcTransport {
               const message: LSPMessage = JSON.parse(messageContent);
               this.handleIncoming(message);
             } catch (error) {
-              process.stderr.write(`Failed to parse LSP message: ${error}\n`);
+              logger.error(`Failed to parse LSP message: ${error}\n`);
             }
           } else {
             break;

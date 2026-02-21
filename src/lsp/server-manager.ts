@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { logger } from '../logger.js';
 import { pathToUri } from '../utils.js';
 import { adapterRegistry } from './adapters/registry.js';
 import { DiagnosticsCache } from './diagnostics.js';
@@ -30,7 +31,7 @@ export class ServerManager {
 
     // Check if server already exists
     if (this.servers.has(key)) {
-      process.stderr.write('[DEBUG getServer] Using existing server instance\n');
+      logger.debug('[DEBUG getServer] Using existing server instance\n');
       const server = this.servers.get(key);
       if (!server) {
         throw new Error('Server exists in map but is undefined');
@@ -40,7 +41,7 @@ export class ServerManager {
 
     // Check if server is currently starting
     if (this.serversStarting.has(key)) {
-      process.stderr.write('[DEBUG getServer] Waiting for server startup in progress\n');
+      logger.debug('[DEBUG getServer] Waiting for server startup in progress\n');
       const startPromise = this.serversStarting.get(key);
       if (!startPromise) {
         throw new Error('Server start promise exists in map but is undefined');
@@ -49,7 +50,7 @@ export class ServerManager {
     }
 
     // Start new server with concurrency protection
-    process.stderr.write('[DEBUG getServer] Starting new server instance\n');
+    logger.debug('[DEBUG getServer] Starting new server instance\n');
     const startPromise = this.startServer(serverConfig);
     this.serversStarting.set(key, startPromise);
 
@@ -57,7 +58,7 @@ export class ServerManager {
       const serverState = await startPromise;
       this.servers.set(key, serverState);
       this.serversStarting.delete(key);
-      process.stderr.write('[DEBUG getServer] Server started and cached\n');
+      logger.debug('[DEBUG getServer] Server started and cached\n');
       return serverState;
     } catch (error) {
       this.serversStarting.delete(key);
@@ -107,7 +108,7 @@ export class ServerManager {
     // Auto-detect adapter for this server
     const adapter = adapterRegistry.getAdapter(serverConfig);
     if (adapter) {
-      process.stderr.write(
+      logger.info(
         `Using adapter "${adapter.name}" for server: ${serverConfig.command.join(' ')}\n`
       );
     }
@@ -244,7 +245,7 @@ export class ServerManager {
       ]);
     } catch (error) {
       // If timeout or initialization fails, mark as initialized anyway
-      process.stderr.write(
+      logger.debug(
         `[DEBUG startServer] Initialization timeout or failed for ${serverConfig.command.join(' ')}, proceeding anyway: ${error}\n`
       );
       serverState.initialized = true;
@@ -280,7 +281,7 @@ export class ServerManager {
           })
           .catch((error) => {
             // Adapter didn't handle it, fall through to standard handling
-            process.stderr.write(
+            logger.debug(
               `[DEBUG handleMessage] Adapter did not handle request: ${message.method} - ${error}\n`
             );
           });
@@ -297,9 +298,7 @@ export class ServerManager {
 
       // Standard LSP message handling
       if (message.method === 'initialized') {
-        process.stderr.write(
-          '[DEBUG handleMessage] Received initialized notification from server\n'
-        );
+        logger.debug('[DEBUG handleMessage] Received initialized notification from server\n');
         serverState.initialized = true;
         // Resolve the initialization promise
         const resolve = serverState.initializationResolve;
@@ -315,7 +314,7 @@ export class ServerManager {
           version?: number;
         };
         if (params?.uri) {
-          process.stderr.write(
+          logger.debug(
             `[DEBUG handleMessage] Received publishDiagnostics for ${params.uri} with ${params.diagnostics?.length || 0} diagnostics${params.version !== undefined ? ` (version: ${params.version})` : ''}\n`
           );
           serverState.diagnosticsCache.update(params.uri, params.diagnostics || [], params.version);
@@ -331,7 +330,7 @@ export class ServerManager {
       const actualInterval = Math.max(serverState.config.restartInterval, minInterval);
       const intervalMs = actualInterval * 60 * 1000; // Convert minutes to milliseconds
 
-      process.stderr.write(
+      logger.debug(
         `[DEBUG setupRestartTimer] Setting up restart timer for ${actualInterval} minutes\n`
       );
 
@@ -343,7 +342,7 @@ export class ServerManager {
 
   private async restartServer(serverState: ServerState): Promise<void> {
     const key = JSON.stringify(serverState.config);
-    process.stderr.write(
+    logger.info(
       `[DEBUG restartServer] Restarting LSP server for ${serverState.config.command.join(' ')}\n`
     );
 
@@ -364,11 +363,11 @@ export class ServerManager {
       const newServerState = await this.startServer(serverState.config);
       this.servers.set(key, newServerState);
 
-      process.stderr.write(
+      logger.info(
         `[DEBUG restartServer] Successfully restarted LSP server for ${serverState.config.command.join(' ')}\n`
       );
     } catch (error) {
-      process.stderr.write(`[DEBUG restartServer] Failed to restart LSP server: ${error}\n`);
+      logger.error(`[DEBUG restartServer] Failed to restart LSP server: ${error}\n`);
     }
   }
 }

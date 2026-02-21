@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
+import { logger } from './logger.js';
 import { loadConfig } from './lsp/config.js';
 import {
   getValidSymbolKinds,
@@ -46,8 +47,8 @@ export class LSPClient {
     const extension = filePath.split('.').pop();
     if (!extension) return null;
 
-    process.stderr.write(`Looking for server for extension: ${extension}\n`);
-    process.stderr.write(
+    logger.debug(`Looking for server for extension: ${extension}\n`);
+    logger.debug(
       `Available servers: ${this.config.servers.map((s) => s.extensions.join(',')).join(' | ')}\n`
     );
 
@@ -57,7 +58,7 @@ export class LSPClient {
     );
 
     if (matchingServers.length === 0) {
-      process.stderr.write(`No server found for extension: ${extension}\n`);
+      logger.debug(`No server found for extension: ${extension}\n`);
       return null;
     }
 
@@ -65,7 +66,7 @@ export class LSPClient {
     if (matchingServers.length === 1) {
       const server = matchingServers[0];
       if (server) {
-        process.stderr.write(`Found server for ${extension}: ${server.command.join(' ')}\n`);
+        logger.debug(`Found server for ${extension}: ${server.command.join(' ')}\n`);
       }
       return server || null;
     }
@@ -104,7 +105,7 @@ export class LSPClient {
     const server = bestMatch || matchingServers[0];
 
     if (server) {
-      process.stderr.write(
+      logger.debug(
         `Found server for ${extension}: ${server.command.join(' ')} (rootDir: ${server.rootDir || '.'})\n`
       );
     }
@@ -126,8 +127,8 @@ export class LSPClient {
     const restarted: string[] = [];
     const failed: string[] = [];
 
-    process.stderr.write(
-      `[DEBUG restartServers] Request to restart servers for extensions: ${extensions ? extensions.join(', ') : 'all'}\n`
+    logger.debug(
+      `[restartServers] Request to restart servers for extensions: ${extensions ? extensions.join(', ') : 'all'}\n`
     );
 
     // Collect servers to restart
@@ -165,10 +166,10 @@ export class LSPClient {
         await this.serverManager.getServer(state.config);
 
         restarted.push(serverDesc);
-        process.stderr.write(`[DEBUG restartServers] Successfully restarted: ${serverDesc}\n`);
+        logger.debug(`[restartServers] Successfully restarted: ${serverDesc}\n`);
       } catch (error) {
         failed.push(`${serverDesc}: ${error}`);
-        process.stderr.write(`[DEBUG restartServers] Failed to restart: ${serverDesc}: ${error}\n`);
+        logger.error(`[restartServers] Failed to restart: ${serverDesc}: ${error}\n`);
       }
     }
 
@@ -196,35 +197,31 @@ export class LSPClient {
 
       // If file is not already open in the LSP server, open it first
       if (!serverState.documentManager.isOpen(filePath)) {
-        process.stderr.write(
-          `[DEBUG syncFileContent] File not open, opening it first: ${filePath}\n`
-        );
+        logger.debug(`[syncFileContent] File not open, opening it first: ${filePath}\n`);
         await serverState.documentManager.ensureOpen(filePath);
       }
 
-      process.stderr.write(`[DEBUG syncFileContent] Syncing file: ${filePath}\n`);
+      logger.debug(`[syncFileContent] Syncing file: ${filePath}\n`);
 
       const fileContent = readFileSync(filePath, 'utf-8');
       serverState.documentManager.sendChange(filePath, fileContent);
 
-      process.stderr.write(`[DEBUG syncFileContent] File synced: ${filePath}\n`);
+      logger.debug(`[syncFileContent] File synced: ${filePath}\n`);
     } catch (error) {
-      process.stderr.write(`[DEBUG syncFileContent] Failed to sync file ${filePath}: ${error}\n`);
+      logger.error(`[syncFileContent] Failed to sync file ${filePath}: ${error}\n`);
       // Don't throw - syncing is best effort
     }
   }
 
   private async getServer(filePath: string): Promise<ServerState> {
-    process.stderr.write(`[DEBUG getServer] Getting server for file: ${filePath}\n`);
+    logger.debug(`[getServer] Getting server for file: ${filePath}\n`);
 
     const serverConfig = this.getServerForFile(filePath);
     if (!serverConfig) {
       throw new Error(`No LSP server configured for file: ${filePath}`);
     }
 
-    process.stderr.write(
-      `[DEBUG getServer] Found server config: ${serverConfig.command.join(' ')}\n`
-    );
+    logger.debug(`[getServer] Found server config: ${serverConfig.command.join(' ')}\n`);
 
     return this.serverManager.getServer(serverConfig);
   }
@@ -290,7 +287,7 @@ export class LSPClient {
   async workspaceSymbol(query: string): Promise<SymbolInformation[]> {
     const servers = Array.from(this.serverManager.getRunningServers().values());
     if (servers.length === 0) {
-      process.stderr.write('[DEBUG workspaceSymbol] No LSP servers running\n');
+      logger.debug('[workspaceSymbol] No LSP servers running\n');
       return [];
     }
 
@@ -324,7 +321,7 @@ export class LSPClient {
 
   async preloadServers(debug = true): Promise<void> {
     if (debug) {
-      process.stderr.write('Scanning configured server directories for supported file types\n');
+      logger.info('Scanning configured server directories for supported file types\n');
     }
 
     const serversToStart = new Set<LSPServerConfig>();
@@ -334,7 +331,7 @@ export class LSPClient {
       const serverDir = serverConfig.rootDir || process.cwd();
 
       if (debug) {
-        process.stderr.write(
+        logger.info(
           `Scanning ${serverDir} for extensions: ${serverConfig.extensions.join(', ')}\n`
         );
       }
@@ -352,35 +349,33 @@ export class LSPClient {
           serversToStart.add(serverConfig);
           if (debug) {
             const matchingExts = serverConfig.extensions.filter((ext) => foundExtensions.has(ext));
-            process.stderr.write(
-              `Found matching extensions in ${serverDir}: ${matchingExts.join(', ')}\n`
-            );
+            logger.info(`Found matching extensions in ${serverDir}: ${matchingExts.join(', ')}\n`);
           }
         }
       } catch (error) {
         if (debug) {
-          process.stderr.write(`Failed to scan ${serverDir}: ${error}\n`);
+          logger.error(`Failed to scan ${serverDir}: ${error}\n`);
         }
       }
     }
 
     if (debug) {
-      process.stderr.write(`Starting ${serversToStart.size} LSP servers...\n`);
+      logger.info(`Starting ${serversToStart.size} LSP servers...\n`);
     }
 
     const startPromises = Array.from(serversToStart).map(async (serverConfig) => {
       try {
         if (debug) {
-          process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
+          logger.info(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
         }
         await this.serverManager.getServer(serverConfig);
         if (debug) {
-          process.stderr.write(
+          logger.info(
             `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
           );
         }
       } catch (error) {
-        process.stderr.write(
+        logger.error(
           `Failed to preload LSP server for ${serverConfig.extensions.join(', ')}: ${error}\n`
         );
       }
@@ -388,7 +383,7 @@ export class LSPClient {
 
     await Promise.all(startPromises);
     if (debug) {
-      process.stderr.write('LSP server preloading completed\n');
+      logger.info('LSP server preloading completed\n');
     }
   }
 

@@ -1,3 +1,4 @@
+import { logger } from '../logger.js';
 import type { Diagnostic } from './types.js';
 
 /**
@@ -46,7 +47,7 @@ export class DiagnosticsCache {
     let lastVersion = this.versions.get(uri) ?? -1;
     let lastUpdateTime = this.lastUpdate.get(uri) ?? startTime;
 
-    process.stderr.write(
+    logger.debug(
       `[DEBUG waitForDiagnosticsIdle] Waiting for diagnostics to stabilize for ${uri}\n`
     );
 
@@ -57,7 +58,7 @@ export class DiagnosticsCache {
       const currentUpdateTime = this.lastUpdate.get(uri) ?? lastUpdateTime;
 
       if (currentVersion !== lastVersion) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG waitForDiagnosticsIdle] Version changed from ${lastVersion} to ${currentVersion}\n`
         );
         lastVersion = currentVersion;
@@ -67,15 +68,13 @@ export class DiagnosticsCache {
 
       const timeSinceLastUpdate = Date.now() - currentUpdateTime;
       if (timeSinceLastUpdate >= idleTime) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG waitForDiagnosticsIdle] Server appears idle after ${timeSinceLastUpdate}ms without updates\n`
         );
         return;
       }
     }
 
-    process.stderr.write(
-      `[DEBUG waitForDiagnosticsIdle] Max wait time reached (${maxWaitTime}ms)\n`
-    );
+    logger.debug(`[DEBUG waitForDiagnosticsIdle] Max wait time reached (${maxWaitTime}ms)\n`);
   }
 }

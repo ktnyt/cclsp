@@ -2,6 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { logger } from './src/logger.js';
 import { LSPClient } from './src/lsp-client.js';
 import { diagnosticsTools } from './src/tools/diagnostics.js';
 import { hoverTools } from './src/tools/hover.js';
@@ -68,18 +69,18 @@ process.on('SIGTERM', () => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write('CCLSP Server running on stdio\n');
+  logger.info('CCLSP Server running on stdio\n');
 
   // Preload LSP servers for file types found in the project
   try {
     await lspClient.preloadServers();
   } catch (error) {
-    process.stderr.write(`Failed to preload LSP servers: ${error}\n`);
+    logger.error(`Failed to preload LSP servers: ${error}\n`);
   }
 }
 
 main().catch((error) => {
-  process.stderr.write(`Server error: ${error}\n`);
+  logger.error(`Server error: ${error}\n`);
   lspClient.dispose();
   process.exit(1);
 });

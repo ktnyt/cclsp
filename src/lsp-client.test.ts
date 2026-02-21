@@ -936,17 +936,21 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const savedLogLevel = process.env.CCLSP_LOG_LEVEL;
+      process.env.CCLSP_LOG_LEVEL = 'debug';
 
-      const result = await client.getDiagnostics('/test.ts');
+      try {
+        const result = await client.getDiagnostics('/test.ts');
 
-      expect(result).toEqual(mockDiagnostics);
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Returning 1 cached diagnostics from publishDiagnostics')
-      );
-
-      getServerSpy.mockRestore();
-
-      stderrSpy.mockRestore();
+        expect(result).toEqual(mockDiagnostics);
+        expect(stderrSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Returning 1 cached diagnostics from publishDiagnostics')
+        );
+      } finally {
+        process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        getServerSpy.mockRestore();
+        stderrSpy.mockRestore();
+      }
     });
 
     it('should handle server not supporting textDocument/diagnostic', async () => {
@@ -971,17 +975,21 @@ describe('LSPClient', () => {
       ).mockResolvedValue(mockServerState);
 
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const savedLogLevel = process.env.CCLSP_LOG_LEVEL;
+      process.env.CCLSP_LOG_LEVEL = 'debug';
 
-      const result = await client.getDiagnostics('/test.ts');
+      try {
+        const result = await client.getDiagnostics('/test.ts');
 
-      expect(result).toEqual([]);
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('textDocument/diagnostic not supported or failed')
-      );
-
-      getServerSpy.mockRestore();
-
-      stderrSpy.mockRestore();
+        expect(result).toEqual([]);
+        expect(stderrSpy).toHaveBeenCalledWith(
+          expect.stringContaining('textDocument/diagnostic not supported or failed')
+        );
+      } finally {
+        process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        getServerSpy.mockRestore();
+        stderrSpy.mockRestore();
+      }
     });
 
     it('should handle unexpected response format', async () => {

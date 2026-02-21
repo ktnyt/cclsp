@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { logger } from '../logger.js';
 import { pathToUri } from '../utils.js';
 import type { JsonRpcTransport } from './json-rpc.js';
 
@@ -23,18 +24,18 @@ export class DocumentManager {
    */
   async ensureOpen(filePath: string): Promise<boolean> {
     if (this.openFiles.has(filePath)) {
-      process.stderr.write(`[DEBUG ensureOpen] File already open: ${filePath}\n`);
+      logger.debug(`[DEBUG ensureOpen] File already open: ${filePath}\n`);
       return false;
     }
 
-    process.stderr.write(`[DEBUG ensureOpen] Opening file: ${filePath}\n`);
+    logger.debug(`[DEBUG ensureOpen] Opening file: ${filePath}\n`);
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
       const uri = pathToUri(filePath);
       const languageId = getLanguageId(filePath);
 
-      process.stderr.write(
+      logger.debug(
         `[DEBUG ensureOpen] File content length: ${fileContent.length}, languageId: ${languageId}\n`
       );
 
@@ -49,10 +50,10 @@ export class DocumentManager {
 
       this.openFiles.add(filePath);
       this.fileVersions.set(filePath, 1);
-      process.stderr.write(`[DEBUG ensureOpen] File opened successfully: ${filePath}\n`);
+      logger.debug(`[DEBUG ensureOpen] File opened successfully: ${filePath}\n`);
       return true;
     } catch (error) {
-      process.stderr.write(`[DEBUG ensureOpen] Failed to open file ${filePath}: ${error}\n`);
+      logger.debug(`[DEBUG ensureOpen] Failed to open file ${filePath}: ${error}\n`);
       throw error;
     }
   }

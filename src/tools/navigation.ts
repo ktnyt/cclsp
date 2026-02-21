@@ -1,3 +1,4 @@
+import { logger } from '../logger.js';
 import type { LSPClient } from '../lsp-client.js';
 import { formatLocations, resolvePath, textResult, withWarning } from './helpers.js';
 import type { ToolDefinition } from './registry.js';
@@ -35,8 +36,8 @@ export const findDefinitionTool: ToolDefinition = {
     const result = await client.findSymbolsByName(absolutePath, symbol_name, symbol_kind);
     const { matches: symbolMatches, warning } = result;
 
-    process.stderr.write(
-      `[DEBUG find_definition] Found ${symbolMatches.length} symbol matches for "${symbol_name}"\n`
+    logger.debug(
+      `[find_definition] Found ${symbolMatches.length} symbol matches for "${symbol_name}"\n`
     );
 
     if (symbolMatches.length === 0) {
@@ -47,14 +48,12 @@ export const findDefinitionTool: ToolDefinition = {
 
     const results = [];
     for (const match of symbolMatches) {
-      process.stderr.write(
-        `[DEBUG find_definition] Processing match: ${match.name} (${client.symbolKindToString(match.kind)}) at ${match.position.line}:${match.position.character}\n`
+      logger.debug(
+        `[find_definition] Processing match: ${match.name} (${client.symbolKindToString(match.kind)}) at ${match.position.line}:${match.position.character}\n`
       );
       try {
         const locations = await client.findDefinition(absolutePath, match.position);
-        process.stderr.write(
-          `[DEBUG find_definition] findDefinition returned ${locations.length} locations\n`
-        );
+        logger.debug(`[find_definition] findDefinition returned ${locations.length} locations\n`);
 
         if (locations.length > 0) {
           const locationResults = formatLocations(locations);
@@ -62,12 +61,12 @@ export const findDefinitionTool: ToolDefinition = {
             `Results for ${match.name} (${client.symbolKindToString(match.kind)}) at ${file_path}:${match.position.line + 1}:${match.position.character + 1}:\n${locationResults}`
           );
         } else {
-          process.stderr.write(
-            `[DEBUG find_definition] No definition found for ${match.name} at position ${match.position.line}:${match.position.character}\n`
+          logger.debug(
+            `[find_definition] No definition found for ${match.name} at position ${match.position.line}:${match.position.character}\n`
           );
         }
       } catch (error) {
-        process.stderr.write(`[DEBUG find_definition] Error processing match: ${error}\n`);
+        logger.error(`[find_definition] Error processing match: ${error}\n`);
       }
     }
 

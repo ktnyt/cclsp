@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { logger } from '../logger.js';
 import { pathToUri, uriToPath } from '../utils.js';
 import type {
   CallHierarchyIncomingCall,
@@ -142,7 +143,7 @@ export function findSymbolPositionInFile(filePath: string, symbol: SymbolInforma
     const startLine = range.start.line;
     const endLine = range.end.line;
 
-    process.stderr.write(
+    logger.debug(
       `[DEBUG findSymbolPositionInFile] Searching for "${symbol.name}" in lines ${startLine}-${endLine}\n`
     );
 
@@ -165,19 +166,19 @@ export function findSymbolPositionInFile(filePath: string, symbol: SymbolInforma
 
       if (symbolIndex !== -1) {
         const actualCharacter = searchStart + symbolIndex;
-        process.stderr.write(
+        logger.debug(
           `[DEBUG findSymbolPositionInFile] Found "${symbol.name}" at line ${lineNum}, character ${actualCharacter}\n`
         );
         return { line: lineNum, character: actualCharacter };
       }
     }
 
-    process.stderr.write(
+    logger.debug(
       `[DEBUG findSymbolPositionInFile] Symbol "${symbol.name}" not found in range, using range start\n`
     );
     return range.start;
   } catch (error) {
-    process.stderr.write(
+    logger.debug(
       `[DEBUG findSymbolPositionInFile] Error reading file: ${error}, using range start\n`
     );
     return symbol.location.range.start;
@@ -191,7 +192,7 @@ export async function findDefinition(
   filePath: string,
   position: Position
 ): Promise<Location[]> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG findDefinition] Requesting definition for ${filePath} at ${position.line}:${position.character}\n`
   );
 
@@ -199,13 +200,13 @@ export async function findDefinition(
 
   const wasJustOpened = await serverState.documentManager.ensureOpen(filePath);
   if (wasJustOpened) {
-    process.stderr.write(
+    logger.debug(
       '[DEBUG findDefinition] File was just opened, waiting for server to index project...\n'
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
-  process.stderr.write('[DEBUG findDefinition] Sending textDocument/definition request\n');
+  logger.debug('[DEBUG findDefinition] Sending textDocument/definition request\n');
   const method = 'textDocument/definition';
   const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
   const result = await serverState.transport.sendRequest(
@@ -217,14 +218,14 @@ export async function findDefinition(
     timeout
   );
 
-  process.stderr.write(
+  logger.debug(
     `[DEBUG findDefinition] Result type: ${typeof result}, isArray: ${Array.isArray(result)}\n`
   );
 
   if (Array.isArray(result)) {
-    process.stderr.write(`[DEBUG findDefinition] Array result with ${result.length} locations\n`);
+    logger.debug(`[DEBUG findDefinition] Array result with ${result.length} locations\n`);
     if (result.length > 0) {
-      process.stderr.write(
+      logger.debug(
         `[DEBUG findDefinition] First location: ${JSON.stringify(result[0], null, 2)}\n`
       );
     }
@@ -234,14 +235,14 @@ export async function findDefinition(
     }));
   }
   if (result && typeof result === 'object' && 'uri' in result) {
-    process.stderr.write(
+    logger.debug(
       `[DEBUG findDefinition] Single location result: ${JSON.stringify(result, null, 2)}\n`
     );
     const location = result as LSPLocation;
     return [{ uri: location.uri, range: location.range }];
   }
 
-  process.stderr.write('[DEBUG findDefinition] No definition found or unexpected result format\n');
+  logger.debug('[DEBUG findDefinition] No definition found or unexpected result format\n');
   return [];
 }
 
@@ -251,7 +252,7 @@ export async function findReferences(
   position: Position,
   includeDeclaration = true
 ): Promise<Location[]> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG] findReferences for ${filePath} at ${position.line}:${position.character}, includeDeclaration: ${includeDeclaration}\n`
   );
 
@@ -259,7 +260,7 @@ export async function findReferences(
 
   const wasJustOpened = await serverState.documentManager.ensureOpen(filePath);
   if (wasJustOpened) {
-    process.stderr.write(
+    logger.debug(
       '[DEBUG findReferences] File was just opened, waiting for server to index project...\n'
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -277,18 +278,16 @@ export async function findReferences(
     timeout
   );
 
-  process.stderr.write(
+  logger.debug(
     `[DEBUG] findReferences result type: ${typeof result}, isArray: ${Array.isArray(result)}, length: ${Array.isArray(result) ? result.length : 'N/A'}\n`
   );
 
   if (result && Array.isArray(result) && result.length > 0) {
-    process.stderr.write(`[DEBUG] First reference: ${JSON.stringify(result[0], null, 2)}\n`);
+    logger.debug(`[DEBUG] First reference: ${JSON.stringify(result[0], null, 2)}\n`);
   } else if (result === null || result === undefined) {
-    process.stderr.write('[DEBUG] findReferences returned null/undefined\n');
+    logger.debug('[DEBUG] findReferences returned null/undefined\n');
   } else {
-    process.stderr.write(
-      `[DEBUG] findReferences returned unexpected result: ${JSON.stringify(result)}\n`
-    );
+    logger.debug(`[DEBUG] findReferences returned unexpected result: ${JSON.stringify(result)}\n`);
   }
 
   if (Array.isArray(result)) {
@@ -309,14 +308,14 @@ export async function renameSymbol(
 ): Promise<{
   changes?: Record<string, Array<{ range: { start: Position; end: Position }; newText: string }>>;
 }> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG renameSymbol] Requesting rename for ${filePath} at ${position.line}:${position.character} to "${newName}"\n`
   );
 
   await serverState.initializationPromise;
   await serverState.documentManager.ensureOpen(filePath);
 
-  process.stderr.write('[DEBUG renameSymbol] Sending textDocument/rename request\n');
+  logger.debug('[DEBUG renameSymbol] Sending textDocument/rename request\n');
   const method = 'textDocument/rename';
   const timeout = serverState.adapter?.getTimeout?.(method) ?? 30000;
   const result = await serverState.transport.sendRequest(
@@ -329,7 +328,7 @@ export async function renameSymbol(
     timeout
   );
 
-  process.stderr.write(
+  logger.debug(
     `[DEBUG renameSymbol] Result type: ${typeof result}, hasChanges: ${result && typeof result === 'object' && 'changes' in result}, hasDocumentChanges: ${result && typeof result === 'object' && 'documentChanges' in result}\n`
   );
 
@@ -342,9 +341,7 @@ export async function renameSymbol(
         >;
       };
       const changeCount = Object.keys(workspaceEdit.changes || {}).length;
-      process.stderr.write(
-        `[DEBUG renameSymbol] WorkspaceEdit has changes for ${changeCount} files\n`
-      );
+      logger.debug(`[DEBUG renameSymbol] WorkspaceEdit has changes for ${changeCount} files\n`);
       return workspaceEdit;
     }
 
@@ -359,7 +356,7 @@ export async function renameSymbol(
         }>;
       };
 
-      process.stderr.write(
+      logger.debug(
         `[DEBUG renameSymbol] WorkspaceEdit has documentChanges with ${workspaceEdit.documentChanges?.length || 0} entries\n`
       );
 
@@ -376,9 +373,7 @@ export async function renameSymbol(
               changes[uri] = [];
             }
             changes[uri].push(...change.edits);
-            process.stderr.write(
-              `[DEBUG renameSymbol] Added ${change.edits.length} edits for ${uri}\n`
-            );
+            logger.debug(`[DEBUG renameSymbol] Added ${change.edits.length} edits for ${uri}\n`);
           }
         }
       }
@@ -387,7 +382,7 @@ export async function renameSymbol(
     }
   }
 
-  process.stderr.write('[DEBUG renameSymbol] No rename changes available\n');
+  logger.debug('[DEBUG renameSymbol] No rename changes available\n');
   return {};
 }
 
@@ -395,7 +390,7 @@ export async function getDocumentSymbols(
   serverState: ServerState,
   filePath: string
 ): Promise<DocumentSymbol[] | SymbolInformation[]> {
-  process.stderr.write(`[DEBUG] Requesting documentSymbol for: ${filePath}\n`);
+  logger.debug(`[DEBUG] Requesting documentSymbol for: ${filePath}\n`);
 
   await serverState.initializationPromise;
   await serverState.documentManager.ensureOpen(filePath);
@@ -411,18 +406,16 @@ export async function getDocumentSymbols(
     timeout
   );
 
-  process.stderr.write(
+  logger.debug(
     `[DEBUG] documentSymbol result type: ${typeof result}, isArray: ${Array.isArray(result)}, length: ${Array.isArray(result) ? result.length : 'N/A'}\n`
   );
 
   if (result && Array.isArray(result) && result.length > 0) {
-    process.stderr.write(`[DEBUG] First symbol: ${JSON.stringify(result[0], null, 2)}\n`);
+    logger.debug(`[DEBUG] First symbol: ${JSON.stringify(result[0], null, 2)}\n`);
   } else if (result === null || result === undefined) {
-    process.stderr.write('[DEBUG] documentSymbol returned null/undefined\n');
+    logger.debug('[DEBUG] documentSymbol returned null/undefined\n');
   } else {
-    process.stderr.write(
-      `[DEBUG] documentSymbol returned unexpected result: ${JSON.stringify(result)}\n`
-    );
+    logger.debug(`[DEBUG] documentSymbol returned unexpected result: ${JSON.stringify(result)}\n`);
   }
 
   if (Array.isArray(result)) {
@@ -438,7 +431,7 @@ export async function findSymbolsByName(
   symbolName: string,
   symbolKind?: string
 ): Promise<{ matches: SymbolMatch[]; warning?: string }> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG findSymbolsByName] Searching for symbol "${symbolName}" with kind "${symbolKind || 'any'}" in ${filePath}\n`
   );
 
@@ -453,16 +446,12 @@ export async function findSymbolsByName(
   const symbols = await getDocumentSymbols(serverState, filePath);
   const matches: SymbolMatch[] = [];
 
-  process.stderr.write(
-    `[DEBUG findSymbolsByName] Got ${symbols.length} symbols from documentSymbols\n`
-  );
+  logger.debug(`[DEBUG findSymbolsByName] Got ${symbols.length} symbols from documentSymbols\n`);
 
   if (isDocumentSymbolArray(symbols)) {
-    process.stderr.write(
-      '[DEBUG findSymbolsByName] Processing DocumentSymbol[] (hierarchical format)\n'
-    );
+    logger.debug('[DEBUG findSymbolsByName] Processing DocumentSymbol[] (hierarchical format)\n');
     const flatSymbols = flattenDocumentSymbols(symbols);
-    process.stderr.write(`[DEBUG findSymbolsByName] Flattened to ${flatSymbols.length} symbols\n`);
+    logger.debug(`[DEBUG findSymbolsByName] Flattened to ${flatSymbols.length} symbols\n`);
 
     for (const symbol of flatSymbols) {
       const nameMatches = symbol.name === symbolName || symbol.name.includes(symbolName);
@@ -470,12 +459,12 @@ export async function findSymbolsByName(
         !effectiveSymbolKind ||
         symbolKindToString(symbol.kind) === effectiveSymbolKind.toLowerCase();
 
-      process.stderr.write(
+      logger.debug(
         `[DEBUG findSymbolsByName] Checking DocumentSymbol: ${symbol.name} (${symbolKindToString(symbol.kind)}) - nameMatch: ${nameMatches}, kindMatch: ${kindMatches}\n`
       );
 
       if (nameMatches && kindMatches) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG findSymbolsByName] DocumentSymbol match: ${symbol.name} (kind=${symbol.kind}) using selectionRange ${symbol.selectionRange.start.line}:${symbol.selectionRange.start.character}\n`
         );
         matches.push({
@@ -488,25 +477,23 @@ export async function findSymbolsByName(
       }
     }
   } else {
-    process.stderr.write(
-      '[DEBUG findSymbolsByName] Processing SymbolInformation[] (flat format)\n'
-    );
+    logger.debug('[DEBUG findSymbolsByName] Processing SymbolInformation[] (flat format)\n');
     for (const symbol of symbols) {
       const nameMatches = symbol.name === symbolName || symbol.name.includes(symbolName);
       const kindMatches =
         !effectiveSymbolKind ||
         symbolKindToString(symbol.kind) === effectiveSymbolKind.toLowerCase();
 
-      process.stderr.write(
+      logger.debug(
         `[DEBUG findSymbolsByName] Checking SymbolInformation: ${symbol.name} (${symbolKindToString(symbol.kind)}) - nameMatch: ${nameMatches}, kindMatch: ${kindMatches}\n`
       );
 
       if (nameMatches && kindMatches) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG findSymbolsByName] SymbolInformation match: ${symbol.name} (kind=${symbol.kind}) at ${symbol.location.range.start.line}:${symbol.location.range.start.character} to ${symbol.location.range.end.line}:${symbol.location.range.end.character}\n`
         );
         const position = findSymbolPositionInFile(filePath, symbol);
-        process.stderr.write(
+        logger.debug(
           `[DEBUG findSymbolsByName] Found symbol position in file: ${position.line}:${position.character}\n`
         );
         matches.push({
@@ -520,11 +507,11 @@ export async function findSymbolsByName(
     }
   }
 
-  process.stderr.write(`[DEBUG findSymbolsByName] Found ${matches.length} matching symbols\n`);
+  logger.debug(`[DEBUG findSymbolsByName] Found ${matches.length} matching symbols\n`);
 
   let fallbackWarning: string | undefined;
   if (effectiveSymbolKind && matches.length === 0) {
-    process.stderr.write(
+    logger.debug(
       `[DEBUG findSymbolsByName] No matches found for kind "${effectiveSymbolKind}", trying fallback search for all kinds\n`
     );
 
@@ -564,7 +551,7 @@ export async function findSymbolsByName(
       const foundKinds = [...new Set(fallbackMatches.map((m) => symbolKindToString(m.kind)))];
       fallbackWarning = `⚠️ No symbols found with kind "${effectiveSymbolKind}". Found ${fallbackMatches.length} symbol(s) with name "${symbolName}" of other kinds: ${foundKinds.join(', ')}.`;
       matches.push(...fallbackMatches);
-      process.stderr.write(
+      logger.debug(
         `[DEBUG findSymbolsByName] Fallback search found ${fallbackMatches.length} additional matches\n`
       );
     }
@@ -578,7 +565,7 @@ export async function getDiagnostics(
   serverState: ServerState,
   filePath: string
 ): Promise<Diagnostic[]> {
-  process.stderr.write(`[DEBUG getDiagnostics] Requesting diagnostics for ${filePath}\n`);
+  logger.debug(`[DEBUG getDiagnostics] Requesting diagnostics for ${filePath}\n`);
 
   await serverState.initializationPromise;
   await serverState.documentManager.ensureOpen(filePath);
@@ -587,13 +574,13 @@ export async function getDiagnostics(
   const cachedDiagnostics = serverState.diagnosticsCache.get(fileUri);
 
   if (cachedDiagnostics !== undefined) {
-    process.stderr.write(
+    logger.debug(
       `[DEBUG getDiagnostics] Returning ${cachedDiagnostics.length} cached diagnostics from publishDiagnostics\n`
     );
     return cachedDiagnostics;
   }
 
-  process.stderr.write(
+  logger.debug(
     '[DEBUG getDiagnostics] No cached diagnostics, trying textDocument/diagnostic request\n'
   );
 
@@ -602,7 +589,7 @@ export async function getDiagnostics(
       textDocument: { uri: fileUri },
     });
 
-    process.stderr.write(
+    logger.debug(
       `[DEBUG getDiagnostics] Result type: ${typeof result}, has kind: ${result && typeof result === 'object' && 'kind' in result}\n`
     );
 
@@ -610,23 +597,21 @@ export async function getDiagnostics(
       const report = result as DocumentDiagnosticReport;
 
       if (report.kind === 'full' && report.items) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG getDiagnostics] Full report with ${report.items.length} diagnostics\n`
         );
         return report.items;
       }
       if (report.kind === 'unchanged') {
-        process.stderr.write('[DEBUG getDiagnostics] Unchanged report (no new diagnostics)\n');
+        logger.debug('[DEBUG getDiagnostics] Unchanged report (no new diagnostics)\n');
         return [];
       }
     }
 
-    process.stderr.write(
-      '[DEBUG getDiagnostics] Unexpected response format, returning empty array\n'
-    );
+    logger.debug('[DEBUG getDiagnostics] Unexpected response format, returning empty array\n');
     return [];
   } catch (error) {
-    process.stderr.write(
+    logger.debug(
       `[DEBUG getDiagnostics] textDocument/diagnostic not supported or failed: ${error}. Waiting for publishDiagnostics...\n`
     );
 
@@ -637,13 +622,13 @@ export async function getDiagnostics(
 
     const diagnosticsAfterWait = serverState.diagnosticsCache.get(fileUri);
     if (diagnosticsAfterWait !== undefined) {
-      process.stderr.write(
+      logger.debug(
         `[DEBUG getDiagnostics] Returning ${diagnosticsAfterWait.length} diagnostics after waiting for idle state\n`
       );
       return diagnosticsAfterWait;
     }
 
-    process.stderr.write(
+    logger.debug(
       '[DEBUG getDiagnostics] No diagnostics yet, triggering publishDiagnostics with no-op change\n'
     );
 
@@ -659,13 +644,13 @@ export async function getDiagnostics(
 
       const diagnosticsAfterTrigger = serverState.diagnosticsCache.get(fileUri);
       if (diagnosticsAfterTrigger !== undefined) {
-        process.stderr.write(
+        logger.debug(
           `[DEBUG getDiagnostics] Returning ${diagnosticsAfterTrigger.length} diagnostics after triggering publishDiagnostics\n`
         );
         return diagnosticsAfterTrigger;
       }
     } catch (triggerError) {
-      process.stderr.write(
+      logger.debug(
         `[DEBUG getDiagnostics] Failed to trigger publishDiagnostics: ${triggerError}\n`
       );
     }
@@ -682,7 +667,7 @@ export async function hover(
   contents: string | { kind: string; value: string };
   range?: { start: Position; end: Position };
 } | null> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG hover] Requesting hover for ${filePath} at ${position.line}:${position.character}\n`
   );
 
@@ -714,7 +699,7 @@ export async function workspaceSymbol(
   serverState: ServerState,
   query: string
 ): Promise<SymbolInformation[]> {
-  process.stderr.write(`[DEBUG workspaceSymbol] Searching for "${query}"\n`);
+  logger.debug(`[DEBUG workspaceSymbol] Searching for "${query}"\n`);
 
   await serverState.initializationPromise;
 
@@ -734,7 +719,7 @@ export async function findImplementation(
   filePath: string,
   position: Position
 ): Promise<Location[]> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG findImplementation] Requesting implementation for ${filePath} at ${position.line}:${position.character}\n`
   );
 
@@ -771,7 +756,7 @@ export async function prepareCallHierarchy(
   filePath: string,
   position: Position
 ): Promise<CallHierarchyItem[]> {
-  process.stderr.write(
+  logger.debug(
     `[DEBUG prepareCallHierarchy] Requesting call hierarchy for ${filePath} at ${position.line}:${position.character}\n`
   );
 
@@ -800,7 +785,7 @@ export async function incomingCalls(
   serverState: ServerState,
   item: CallHierarchyItem
 ): Promise<CallHierarchyIncomingCall[]> {
-  process.stderr.write(`[DEBUG incomingCalls] Requesting incoming calls for ${item.name}\n`);
+  logger.debug(`[DEBUG incomingCalls] Requesting incoming calls for ${item.name}\n`);
 
   await serverState.initializationPromise;
 
@@ -819,7 +804,7 @@ export async function outgoingCalls(
   serverState: ServerState,
   item: CallHierarchyItem
 ): Promise<CallHierarchyOutgoingCall[]> {
-  process.stderr.write(`[DEBUG outgoingCalls] Requesting outgoing calls for ${item.name}\n`);
+  logger.debug(`[DEBUG outgoingCalls] Requesting outgoing calls for ${item.name}\n`);
 
   await serverState.initializationPromise;
 
