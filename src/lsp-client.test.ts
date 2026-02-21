@@ -7,7 +7,6 @@ import { pathToUri, uriToPath } from './utils.js';
 
 // Type for accessing private methods in tests
 type LSPClientInternal = {
-  startServer: (config: unknown) => Promise<unknown>;
   getServer: (filePath: string) => Promise<{ initializationPromise: Promise<void> }>;
 };
 
@@ -127,23 +126,22 @@ describe('LSPClient', () => {
       // Mock process.stderr.write to capture output
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-      // Mock startServer to avoid actually starting LSP servers
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockImplementation(async () => ({
-        process: { kill: jest.fn() },
-        initialized: true,
-        documentManager: createMockDocumentManager(),
-      }));
+      // Mock serverManager.getServer to avoid actually starting LSP servers
+      const getServerSpy = spyOn((client as any).serverManager, 'getServer').mockImplementation(
+        async () => ({
+          process: { kill: jest.fn() },
+          initialized: true,
+          documentManager: createMockDocumentManager(),
+        })
+      );
 
       await client.preloadServers(false);
 
       // Should attempt to start TypeScript server for .ts and .js files
-      expect(startServerSpy).toHaveBeenCalled();
+      expect(getServerSpy).toHaveBeenCalled();
 
       stderrSpy.mockRestore();
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should handle missing .gitignore gracefully', async () => {
@@ -152,22 +150,21 @@ describe('LSPClient', () => {
 
       const client = new LSPClient(TEST_CONFIG_PATH);
 
-      // Mock startServer
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockImplementation(async () => ({
-        process: { kill: jest.fn() },
-        initialized: true,
-        documentManager: createMockDocumentManager(),
-      }));
+      // Mock serverManager.getServer
+      const getServerSpy = spyOn((client as any).serverManager, 'getServer').mockImplementation(
+        async () => ({
+          process: { kill: jest.fn() },
+          initialized: true,
+          documentManager: createMockDocumentManager(),
+        })
+      );
 
       // Should not throw error
       await expect(async () => {
         await client.preloadServers(false);
       }).not.toThrow();
 
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it.skip('should handle preloading errors gracefully', async () => {
@@ -177,11 +174,10 @@ describe('LSPClient', () => {
 
       const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-      // Mock startServer to throw error
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockRejectedValue(new Error('Failed to start server'));
+      // Mock serverManager.getServer to throw error
+      const getServerSpy = spyOn((client as any).serverManager, 'getServer').mockRejectedValue(
+        new Error('Failed to start server')
+      );
 
       // Should complete without throwing
       await client.preloadServers(false);
@@ -189,7 +185,7 @@ describe('LSPClient', () => {
       // Should have logged the error to stderr
       expect(stderrSpy).toHaveBeenCalled();
 
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
       stderrSpy.mockRestore();
     });
   });
@@ -485,6 +481,7 @@ describe('LSPClient', () => {
   describe('Server restart functionality', () => {
     it('should setup restart timer when restartInterval is configured', () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       // Mock setTimeout to verify timer is set
       const setTimeoutSpy = spyOn(global, 'setTimeout').mockImplementation((() => 123) as any);
@@ -504,8 +501,8 @@ describe('LSPClient', () => {
       };
 
       try {
-        // Call setupRestartTimer directly
-        (client as any).setupRestartTimer(mockServerState);
+        // Call setupRestartTimer on serverManager
+        (serverManager as any).setupRestartTimer(mockServerState);
 
         // Verify setTimeout was called with correct interval (0.1 minutes = 6000ms)
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 6000);
@@ -517,6 +514,7 @@ describe('LSPClient', () => {
 
     it('should not setup restart timer when restartInterval is not configured', () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       // Mock setTimeout to verify timer is NOT set
       const setTimeoutSpy = spyOn(global, 'setTimeout').mockImplementation((() => 123) as any);
@@ -536,8 +534,8 @@ describe('LSPClient', () => {
       };
 
       try {
-        // Call setupRestartTimer directly
-        (client as any).setupRestartTimer(mockServerState);
+        // Call setupRestartTimer on serverManager
+        (serverManager as any).setupRestartTimer(mockServerState);
 
         // Verify setTimeout was NOT called
         expect(setTimeoutSpy).not.toHaveBeenCalled();
@@ -549,6 +547,7 @@ describe('LSPClient', () => {
 
     it('should clear restart timer when disposing client', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       const mockTimer = setTimeout(() => {}, 1000);
       const mockServerState = {
@@ -557,9 +556,8 @@ describe('LSPClient', () => {
       };
 
       // Mock servers map to include our test server state
-      const serversMap = new Map();
+      const serversMap = serverManager.getRunningServers();
       serversMap.set('test-key', mockServerState);
-      (client as any).servers = serversMap;
 
       const clearTimeoutSpy = spyOn(global, 'clearTimeout');
 
@@ -595,6 +593,7 @@ describe('LSPClient', () => {
 
     it('should restart servers for specific extensions', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       // Mock servers map with running servers
       const mockServerState = {
@@ -606,15 +605,11 @@ describe('LSPClient', () => {
         restartTimer: undefined,
       };
 
-      const serversMap = new Map();
+      const serversMap = serverManager.getRunningServers();
       serversMap.set(JSON.stringify(mockServerState.config), mockServerState);
-      (client as any).servers = serversMap;
 
-      // Mock startServer to simulate successful restart
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockResolvedValue({
+      // Mock serverManager.getServer to simulate successful restart
+      const getServerSpy = spyOn(serverManager, 'getServer').mockResolvedValue({
         process: { kill: jest.fn() },
         initialized: true,
         initializationPromise: Promise.resolve(),
@@ -630,13 +625,14 @@ describe('LSPClient', () => {
       expect(result.restarted[0]).toContain('typescript-language-server');
       expect(result.failed).toHaveLength(0);
       expect(mockServerState.process.kill).toHaveBeenCalled();
-      expect(startServerSpy).toHaveBeenCalledWith(mockServerState.config);
+      expect(getServerSpy).toHaveBeenCalledWith(mockServerState.config);
 
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should restart all servers when no extensions specified', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       // Mock multiple servers
       const mockServer1 = {
@@ -657,16 +653,12 @@ describe('LSPClient', () => {
         restartTimer: undefined,
       };
 
-      const serversMap = new Map();
+      const serversMap = serverManager.getRunningServers();
       serversMap.set(JSON.stringify(mockServer1.config), mockServer1);
       serversMap.set(JSON.stringify(mockServer2.config), mockServer2);
-      (client as any).servers = serversMap;
 
-      // Mock startServer
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockResolvedValue({
+      // Mock serverManager.getServer
+      const getServerSpy = spyOn(serverManager, 'getServer').mockResolvedValue({
         process: { kill: jest.fn() },
         initialized: true,
         initializationPromise: Promise.resolve(),
@@ -682,13 +674,14 @@ describe('LSPClient', () => {
       expect(result.failed).toHaveLength(0);
       expect(mockServer1.process.kill).toHaveBeenCalled();
       expect(mockServer2.process.kill).toHaveBeenCalled();
-      expect(startServerSpy).toHaveBeenCalledTimes(2);
+      expect(getServerSpy).toHaveBeenCalledTimes(2);
 
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should handle partial restart failures', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       const mockServer1 = {
         process: { kill: jest.fn() },
@@ -708,29 +701,27 @@ describe('LSPClient', () => {
         restartTimer: undefined,
       };
 
-      const serversMap = new Map();
+      const serversMap = serverManager.getRunningServers();
       serversMap.set(JSON.stringify(mockServer1.config), mockServer1);
       serversMap.set(JSON.stringify(mockServer2.config), mockServer2);
-      (client as any).servers = serversMap;
 
       let callCount = 0;
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockImplementation(async (config) => {
-        callCount++;
-        if (callCount === 1) {
-          return {
-            process: { kill: jest.fn() },
-            initialized: true,
-            initializationPromise: Promise.resolve(),
-            documentManager: createMockDocumentManager(),
-            startTime: Date.now(),
-            config,
-          };
+      const getServerSpy = spyOn(serverManager, 'getServer').mockImplementation(
+        async (config: unknown) => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              process: { kill: jest.fn() },
+              initialized: true,
+              initializationPromise: Promise.resolve(),
+              documentManager: createMockDocumentManager(),
+              startTime: Date.now(),
+              config,
+            };
+          }
+          throw new Error('Failed to start server');
         }
-        throw new Error('Failed to start server');
-      });
+      );
 
       const result = await client.restartServers();
 
@@ -739,11 +730,12 @@ describe('LSPClient', () => {
       expect(result.failed).toHaveLength(1);
       expect(result.message).toContain('Restarted 1 server(s), but 1 failed');
 
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
 
     it('should clear restart timer before restarting', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
+      const serverManager = (client as any).serverManager;
 
       const mockTimer = setTimeout(() => {}, 1000);
       const mockServerState = {
@@ -755,15 +747,11 @@ describe('LSPClient', () => {
         restartTimer: mockTimer,
       };
 
-      const serversMap = new Map();
+      const serversMap = serverManager.getRunningServers();
       serversMap.set(JSON.stringify(mockServerState.config), mockServerState);
-      (client as any).servers = serversMap;
 
       const clearTimeoutSpy = spyOn(global, 'clearTimeout');
-      const startServerSpy = spyOn(
-        client as unknown as LSPClientInternal,
-        'startServer'
-      ).mockResolvedValue({
+      const getServerSpy = spyOn(serverManager, 'getServer').mockResolvedValue({
         process: { kill: jest.fn() },
         initialized: true,
         initializationPromise: Promise.resolve(),
@@ -777,7 +765,7 @@ describe('LSPClient', () => {
       expect(clearTimeoutSpy).toHaveBeenCalledWith(mockTimer);
 
       clearTimeoutSpy.mockRestore();
-      startServerSpy.mockRestore();
+      getServerSpy.mockRestore();
     });
   });
 
@@ -1096,7 +1084,7 @@ describe('LSPClient', () => {
       };
 
       // Mock servers map
-      (client as any).servers = new Map([['test-key', mockServerState]]);
+      (client as any).serverManager.getRunningServers().set('test-key', mockServerState);
 
       const result = await client.workspaceSymbol('test');
 
@@ -1111,9 +1099,7 @@ describe('LSPClient', () => {
     it('should return empty array when no servers running', async () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
-      // Mock empty servers map
-      (client as any).servers = new Map();
-
+      // serverManager starts with an empty servers map by default
       const result = await client.workspaceSymbol('test');
 
       expect(result).toEqual([]);
@@ -1134,7 +1120,7 @@ describe('LSPClient', () => {
         adapter: undefined,
       };
 
-      (client as any).servers = new Map([['test-key', mockServerState]]);
+      (client as any).serverManager.getRunningServers().set('test-key', mockServerState);
 
       const result = await client.workspaceSymbol('test');
 

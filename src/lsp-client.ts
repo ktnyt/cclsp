@@ -1,12 +1,8 @@
-import { type ChildProcess, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { constants, access, readFile } from 'node:fs/promises';
 import { join, normalize, relative } from 'node:path';
 import { loadGitignore, scanDirectoryForExtensions } from './file-scanner.js';
-import { adapterRegistry } from './lsp/adapters/registry.js';
 import { loadConfig } from './lsp/config.js';
-import { DocumentManager } from './lsp/document-manager.js';
-import { JsonRpcTransport } from './lsp/json-rpc.js';
+import { ServerManager } from './lsp/server-manager.js';
 import type {
   CallHierarchyIncomingCall,
   CallHierarchyItem,
@@ -15,9 +11,7 @@ import type {
   Diagnostic,
   DocumentDiagnosticReport,
   DocumentSymbol,
-  LSPError,
   LSPLocation,
-  LSPMessage,
   LSPServerConfig,
   Location,
   Position,
@@ -30,12 +24,7 @@ import { pathToUri, uriToPath } from './utils.js';
 
 export class LSPClient {
   private config: Config;
-  private servers: Map<string, ServerState> = new Map();
-  private serversStarting: Map<string, Promise<ServerState>> = new Map();
-
-  private isPylspServer(serverConfig: LSPServerConfig): boolean {
-    return serverConfig.command.some((cmd) => cmd.includes('pylsp'));
-  }
+  private serverManager = new ServerManager();
 
   constructor(configPath?: string) {
     this.config = loadConfig(configPath);
@@ -111,294 +100,6 @@ export class LSPClient {
     return server || null;
   }
 
-  private async startServer(serverConfig: LSPServerConfig): Promise<ServerState> {
-    const [command, ...args] = serverConfig.command;
-    if (!command) {
-      throw new Error('No command specified in server config');
-    }
-    const childProcess = spawn(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: serverConfig.rootDir || process.cwd(),
-    });
-
-    let initializationResolve: (() => void) | undefined;
-    const initializationPromise = new Promise<void>((resolve) => {
-      initializationResolve = resolve;
-    });
-
-    // Auto-detect adapter for this server
-    const adapter = adapterRegistry.getAdapter(serverConfig);
-    if (adapter) {
-      process.stderr.write(
-        `Using adapter "${adapter.name}" for server: ${serverConfig.command.join(' ')}\n`
-      );
-    }
-
-    // Create transport with message handler for non-response messages
-    const transport = new JsonRpcTransport(childProcess, (message: LSPMessage) => {
-      this.handleMessage(message, serverState);
-    });
-
-    const documentManager = new DocumentManager(transport);
-
-    const serverState: ServerState = {
-      process: childProcess,
-      transport,
-      documentManager,
-      initialized: false,
-      initializationPromise,
-      startTime: Date.now(),
-      config: serverConfig,
-      restartTimer: undefined,
-      diagnostics: new Map(),
-      lastDiagnosticUpdate: new Map(),
-      diagnosticVersions: new Map(),
-      adapter, // Store adapter for later use
-    };
-
-    // Store the resolve function to call when initialized notification is received
-    serverState.initializationResolve = initializationResolve;
-
-    childProcess.stderr?.on('data', (data: Buffer) => {
-      // Forward LSP server stderr directly to MCP stderr
-      process.stderr.write(data);
-    });
-
-    // Initialize the server
-    const initializeParams: {
-      processId: number | null;
-      clientInfo: { name: string; version: string };
-      capabilities: unknown;
-      rootUri: string;
-      workspaceFolders: Array<{ uri: string; name: string }>;
-      initializationOptions?: unknown;
-    } = {
-      processId: childProcess.pid || null,
-      clientInfo: { name: 'cclsp', version: '0.1.0' },
-      capabilities: {
-        textDocument: {
-          synchronization: {
-            didOpen: true,
-            didChange: true,
-            didClose: true,
-          },
-          definition: { linkSupport: false },
-          references: {
-            includeDeclaration: true,
-            dynamicRegistration: false,
-          },
-          rename: { prepareSupport: false },
-          documentSymbol: {
-            symbolKind: {
-              valueSet: [
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-                24, 25, 26,
-              ],
-            },
-            hierarchicalDocumentSymbolSupport: true,
-          },
-          completion: {
-            completionItem: {
-              snippetSupport: true,
-            },
-          },
-          hover: {},
-          signatureHelp: {},
-          diagnostic: {
-            dynamicRegistration: false,
-            relatedDocumentSupport: false,
-          },
-        },
-        workspace: {
-          workspaceEdit: {
-            documentChanges: true,
-          },
-          workspaceFolders: true,
-        },
-      },
-      rootUri: pathToUri(serverConfig.rootDir || process.cwd()),
-      workspaceFolders: [
-        {
-          uri: pathToUri(serverConfig.rootDir || process.cwd()),
-          name: 'workspace',
-        },
-      ],
-    };
-
-    // Handle initializationOptions with backwards compatibility for pylsp
-    if (serverConfig.initializationOptions !== undefined) {
-      initializeParams.initializationOptions = serverConfig.initializationOptions;
-    } else if (this.isPylspServer(serverConfig)) {
-      // Backwards compatibility: provide default pylsp settings when none are specified
-      initializeParams.initializationOptions = {
-        settings: {
-          pylsp: {
-            plugins: {
-              jedi_completion: { enabled: true },
-              jedi_definition: { enabled: true },
-              jedi_hover: { enabled: true },
-              jedi_references: { enabled: true },
-              jedi_signature_help: { enabled: true },
-              jedi_symbols: { enabled: true },
-              pylint: { enabled: false },
-              pycodestyle: { enabled: false },
-              pyflakes: { enabled: false },
-              yapf: { enabled: false },
-              rope_completion: { enabled: false },
-            },
-          },
-        },
-      };
-    }
-
-    const initResult = await transport.sendRequest('initialize', initializeParams);
-
-    // Send the initialized notification after receiving the initialize response
-    transport.sendNotification('initialized', {});
-
-    // Wait for the server to send the initialized notification back with timeout
-    const INITIALIZATION_TIMEOUT = 3000; // 3 seconds
-    try {
-      await Promise.race([
-        initializationPromise,
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Initialization timeout')), INITIALIZATION_TIMEOUT)
-        ),
-      ]);
-    } catch (error) {
-      // If timeout or initialization fails, mark as initialized anyway
-      process.stderr.write(
-        `[DEBUG startServer] Initialization timeout or failed for ${serverConfig.command.join(' ')}, proceeding anyway: ${error}\n`
-      );
-      serverState.initialized = true;
-      if (serverState.initializationResolve) {
-        serverState.initializationResolve();
-        serverState.initializationResolve = undefined;
-      }
-    }
-
-    // Set up auto-restart timer if configured
-    this.setupRestartTimer(serverState);
-
-    return serverState;
-  }
-
-  private handleMessage(message: LSPMessage, serverState?: ServerState) {
-    // Handle notifications and requests from server
-    // (Response correlation is handled by JsonRpcTransport)
-    if (message.method && serverState) {
-      const { adapter } = serverState;
-
-      // Try adapter-specific handlers first for custom requests
-      if (message.id && adapter?.handleRequest) {
-        adapter
-          .handleRequest(message.method, message.params, serverState)
-          .then((result) => {
-            // Send response back to server via transport
-            serverState.transport.sendMessage({
-              jsonrpc: '2.0',
-              id: message.id,
-              result,
-            });
-          })
-          .catch((error) => {
-            // Adapter didn't handle it, fall through to standard handling
-            process.stderr.write(
-              `[DEBUG handleMessage] Adapter did not handle request: ${message.method} - ${error}\n`
-            );
-          });
-        return;
-      }
-
-      // Try adapter-specific notification handlers
-      if (!message.id && adapter?.handleNotification) {
-        const handled = adapter.handleNotification(message.method, message.params, serverState);
-        if (handled) {
-          return;
-        }
-      }
-
-      // Standard LSP message handling
-      if (message.method === 'initialized') {
-        process.stderr.write(
-          '[DEBUG handleMessage] Received initialized notification from server\n'
-        );
-        serverState.initialized = true;
-        // Resolve the initialization promise
-        const resolve = serverState.initializationResolve;
-        if (resolve) {
-          resolve();
-          serverState.initializationResolve = undefined;
-        }
-      } else if (message.method === 'textDocument/publishDiagnostics') {
-        // Handle diagnostic notifications from the server
-        const params = message.params as {
-          uri: string;
-          diagnostics: Diagnostic[];
-          version?: number;
-        };
-        if (params?.uri) {
-          process.stderr.write(
-            `[DEBUG handleMessage] Received publishDiagnostics for ${params.uri} with ${params.diagnostics?.length || 0} diagnostics${params.version !== undefined ? ` (version: ${params.version})` : ''}\n`
-          );
-          serverState.diagnostics.set(params.uri, params.diagnostics || []);
-          serverState.lastDiagnosticUpdate.set(params.uri, Date.now());
-          if (params.version !== undefined) {
-            serverState.diagnosticVersions.set(params.uri, params.version);
-          }
-        }
-      }
-    }
-  }
-
-  private setupRestartTimer(serverState: ServerState): void {
-    if (serverState.config.restartInterval && serverState.config.restartInterval > 0) {
-      // Minimum interval is 0.1 minutes (6 seconds) for testing, practical minimum is 1 minute
-      const minInterval = 0.1;
-      const actualInterval = Math.max(serverState.config.restartInterval, minInterval);
-      const intervalMs = actualInterval * 60 * 1000; // Convert minutes to milliseconds
-
-      process.stderr.write(
-        `[DEBUG setupRestartTimer] Setting up restart timer for ${actualInterval} minutes\n`
-      );
-
-      serverState.restartTimer = setTimeout(() => {
-        this.restartServer(serverState);
-      }, intervalMs);
-    }
-  }
-
-  private async restartServer(serverState: ServerState): Promise<void> {
-    const key = JSON.stringify(serverState.config);
-    process.stderr.write(
-      `[DEBUG restartServer] Restarting LSP server for ${serverState.config.command.join(' ')}\n`
-    );
-
-    // Clear existing timer
-    if (serverState.restartTimer) {
-      clearTimeout(serverState.restartTimer);
-      serverState.restartTimer = undefined;
-    }
-
-    // Terminate old server
-    serverState.process.kill();
-
-    // Remove from servers map
-    this.servers.delete(key);
-
-    try {
-      // Start new server
-      const newServerState = await this.startServer(serverState.config);
-      this.servers.set(key, newServerState);
-
-      process.stderr.write(
-        `[DEBUG restartServer] Successfully restarted LSP server for ${serverState.config.command.join(' ')}\n`
-      );
-    } catch (error) {
-      process.stderr.write(`[DEBUG restartServer] Failed to restart LSP server: ${error}\n`);
-    }
-  }
-
   /**
    * Manually restart LSP servers for specific extensions or all servers
    * @param extensions Array of file extensions, or null to restart all
@@ -420,7 +121,7 @@ export class LSPClient {
     // Collect servers to restart
     const serversToRestart: Array<{ key: string; state: ServerState }> = [];
 
-    for (const [key, serverState] of this.servers.entries()) {
+    for (const [key, serverState] of this.serverManager.getRunningServers().entries()) {
       if (!extensions || extensions.some((ext) => serverState.config.extensions.includes(ext))) {
         serversToRestart.push({ key, state: serverState });
       }
@@ -433,8 +134,8 @@ export class LSPClient {
       return { success: false, restarted: [], failed: [], message };
     }
 
-    // Restart each server
-    for (const { key, state } of serversToRestart) {
+    // Restart each server by disposing and re-getting via serverManager
+    for (const { state } of serversToRestart) {
       const serverDesc = `${state.config.command.join(' ')} (${state.config.extensions.join(', ')})`;
 
       try {
@@ -447,12 +148,9 @@ export class LSPClient {
         // Terminate old server
         state.process.kill();
 
-        // Remove from servers map
-        this.servers.delete(key);
-
-        // Start new server
-        const newServerState = await this.startServer(state.config);
-        this.servers.set(key, newServerState);
+        // Remove from running servers and start new one
+        this.serverManager.getRunningServers().delete(JSON.stringify(state.config));
+        await this.serverManager.getServer(state.config);
 
         restarted.push(serverDesc);
         process.stderr.write(`[DEBUG restartServers] Successfully restarted: ${serverDesc}\n`);
@@ -516,43 +214,7 @@ export class LSPClient {
       `[DEBUG getServer] Found server config: ${serverConfig.command.join(' ')}\n`
     );
 
-    const key = JSON.stringify(serverConfig);
-
-    // Check if server already exists
-    if (this.servers.has(key)) {
-      process.stderr.write('[DEBUG getServer] Using existing server instance\n');
-      const server = this.servers.get(key);
-      if (!server) {
-        throw new Error('Server exists in map but is undefined');
-      }
-      return server;
-    }
-
-    // Check if server is currently starting
-    if (this.serversStarting.has(key)) {
-      process.stderr.write('[DEBUG getServer] Waiting for server startup in progress\n');
-      const startPromise = this.serversStarting.get(key);
-      if (!startPromise) {
-        throw new Error('Server start promise exists in map but is undefined');
-      }
-      return await startPromise;
-    }
-
-    // Start new server with concurrency protection
-    process.stderr.write('[DEBUG getServer] Starting new server instance\n');
-    const startPromise = this.startServer(serverConfig);
-    this.serversStarting.set(key, startPromise);
-
-    try {
-      const serverState = await startPromise;
-      this.servers.set(key, serverState);
-      this.serversStarting.delete(key);
-      process.stderr.write('[DEBUG getServer] Server started and cached\n');
-      return serverState;
-    } catch (error) {
-      this.serversStarting.delete(key);
-      throw error;
-    }
+    return this.serverManager.getServer(serverConfig);
   }
 
   async findDefinition(filePath: string, position: Position): Promise<Location[]> {
@@ -1386,7 +1048,7 @@ export class LSPClient {
     process.stderr.write(`[DEBUG workspaceSymbol] Searching for "${query}"\n`);
 
     // Get any running server to send the request
-    const servers = Array.from(this.servers.values());
+    const servers = Array.from(this.serverManager.getRunningServers().values());
     if (servers.length === 0) {
       process.stderr.write('[DEBUG workspaceSymbol] No LSP servers running\n');
       return [];
@@ -1555,18 +1217,14 @@ export class LSPClient {
 
     const startPromises = Array.from(serversToStart).map(async (serverConfig) => {
       try {
-        const key = JSON.stringify(serverConfig);
-        if (!this.servers.has(key)) {
-          if (debug) {
-            process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
-          }
-          const serverState = await this.startServer(serverConfig);
-          this.servers.set(key, serverState);
-          if (debug) {
-            process.stderr.write(
-              `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
-            );
-          }
+        if (debug) {
+          process.stderr.write(`Preloading LSP server: ${serverConfig.command.join(' ')}\n`);
+        }
+        await this.serverManager.getServer(serverConfig);
+        if (debug) {
+          process.stderr.write(
+            `Successfully preloaded LSP server for extensions: ${serverConfig.extensions.join(', ')}\n`
+          );
         }
       } catch (error) {
         process.stderr.write(
@@ -1582,13 +1240,6 @@ export class LSPClient {
   }
 
   dispose(): void {
-    for (const serverState of this.servers.values()) {
-      // Clear restart timer if exists
-      if (serverState.restartTimer) {
-        clearTimeout(serverState.restartTimer);
-      }
-      serverState.process.kill();
-    }
-    this.servers.clear();
+    this.serverManager.dispose();
   }
 }
