@@ -1,7 +1,7 @@
-import type { LSPServerConfig } from '../../types.js';
-import { PyrightAdapter } from './pyright.js';
-import type { ServerAdapter } from './types.js';
-import { VueLanguageServerAdapter } from './vue.js';
+import type { LSPServerConfig } from "../../types.js";
+import type { ServerAdapter } from "../types.js";
+import { PyrightAdapter } from "./pyright.js";
+import { VueLanguageServerAdapter } from "./vue.js";
 
 /**
  * Registry of built-in server adapters.

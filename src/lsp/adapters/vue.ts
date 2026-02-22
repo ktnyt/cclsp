@@ -1,6 +1,6 @@
-import { logger } from '../../logger.js';
-import type { LSPServerConfig } from '../../types.js';
-import type { ServerAdapter, ServerState } from './types.js';
+import { logger } from "../../logger.js";
+import type { LSPServerConfig } from "../../types.js";
+import type { ServerAdapter, ServerState } from "../types.js";
 
 /**
  * Adapter for Vue Language Server (@vue/language-server).
@@ -14,24 +14,31 @@ import type { ServerAdapter, ServerState } from './types.js';
  * - Extended timeouts for operations that require TypeScript analysis
  */
 export class VueLanguageServerAdapter implements ServerAdapter {
-  readonly name = 'vue-language-server';
+  readonly name = "vue-language-server";
 
   matches(config: LSPServerConfig): boolean {
     return config.command.some(
-      (c: string) => c.includes('vue-language-server') || c.includes('@vue/language-server')
+      (c: string) =>
+        c.includes("vue-language-server") || c.includes("@vue/language-server"),
     );
   }
 
-  handleRequest(method: string, params: unknown, state: ServerState): Promise<unknown> {
+  handleRequest(
+    method: string,
+    params: unknown,
+    state: ServerState,
+  ): Promise<unknown> {
     // Handle vue-language-server's custom tsserver/request protocol
-    if (method === 'tsserver/request') {
+    if (method === "tsserver/request") {
       const requestParams = params as [number, string, unknown];
       const [id, requestType] = requestParams;
 
-      logger.debug(`[DEBUG VueAdapter] Handling tsserver/request: ${requestType} (id: ${id})\n`);
+      logger.debug(
+        `[DEBUG VueAdapter] Handling tsserver/request: ${requestType} (id: ${id})\n`,
+      );
 
       // Respond to project info requests
-      if (requestType === '_vue:projectInfo') {
+      if (requestType === "_vue:projectInfo") {
         // Return minimal response to unblock the server
         // The server can work without full TypeScript project info
         return Promise.resolve([
@@ -55,10 +62,10 @@ export class VueLanguageServerAdapter implements ServerAdapter {
     // Vue language server can be slow on certain operations
     // that require TypeScript analysis
     const timeouts: Record<string, number> = {
-      'textDocument/documentSymbol': 60000, // 60 seconds
-      'textDocument/definition': 45000, // 45 seconds
-      'textDocument/references': 45000, // 45 seconds
-      'textDocument/rename': 45000, // 45 seconds
+      "textDocument/documentSymbol": 60000, // 60 seconds
+      "textDocument/definition": 45000, // 45 seconds
+      "textDocument/references": 45000, // 45 seconds
+      "textDocument/rename": 45000, // 45 seconds
     };
     return timeouts[method];
   }
