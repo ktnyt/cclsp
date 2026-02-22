@@ -1,4 +1,4 @@
-%% Proposed Architecture - Component Overview
+%% Post-Refactor Architecture - Component Overview
 %%
 %% This diagram shows the refactored cclsp architecture after decomposing
 %% the two god files into focused, single-responsibility modules.
@@ -17,11 +17,11 @@ graph TB
         Refactoring["refactoring.ts<br/>rename_symbol<br/>rename_symbol_strict"]
         Diagnostics["diagnostics.ts<br/>get_diagnostics"]
         Server["server.ts<br/>restart_server"]
-        Helpers["helpers.ts<br/>resolvePosition<br/>formatLocation<br/>parseArguments"]
+        Helpers["helpers.ts<br/>resolvePath<br/>formatLocations<br/>textResult, withWarning"]
     end
 
     subgraph "LSP Facade"
-        LSPClient["src/lsp/client.ts<br/>LSPClient Facade<br/>(thin composition layer)"]
+        LSPClient["src/lsp-client.ts<br/>LSPClient Facade<br/>(thin composition layer)"]
     end
 
     subgraph "LSP Internals (src/lsp/)"
@@ -34,19 +34,19 @@ graph TB
         LSPTypes["types.ts<br/>ServerState (single source)<br/>LSPMessage"]
     end
 
-    subgraph "Adapter System (unchanged)"
+    subgraph "Adapter System"
         AdapterReg["adapters/registry.ts"]
         VueAdapter["adapters/vue.ts"]
         PyrightAdapter["adapters/pyright.ts"]
-        AdapterTypes["adapters/types.ts<br/>(imports ServerState<br/>from ../types.ts)"]
     end
 
-    subgraph "Support Modules (unchanged)"
+    subgraph "Support Modules"
         FileEditor["src/file-editor.ts"]
         FileScanner["src/file-scanner.ts"]
         Types["src/types.ts"]
         Utils["src/utils.ts"]
-        Logger["src/logger.ts (new)<br/>custom lightweight logger<br/>CCLSP_LOG_LEVEL env var"]
+        Logger["src/logger.ts<br/>custom lightweight logger<br/>CCLSP_LOG_LEVEL env var"]
+        Version["src/version.ts<br/>dynamic package.json read"]
     end
 
     subgraph "LSP Server Processes"
@@ -94,6 +94,7 @@ graph TB
 
     AdapterReg --> VueAdapter
     AdapterReg --> PyrightAdapter
-    AdapterTypes -.->|"imports from"| LSPTypes
+    VueAdapter -.->|"imports ServerState"| LSPTypes
+    PyrightAdapter -.->|"imports ServerState"| LSPTypes
 
     FileEditor -->|"sync after edit"| LSPClient

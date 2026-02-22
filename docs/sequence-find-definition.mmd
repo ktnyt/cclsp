@@ -1,59 +1,85 @@
-%% Sequence Diagram: find_definition flow (CURRENT ARCHITECTURE)
+%% Sequence Diagram: find_definition flow (POST-REFACTOR)
 %%
 %% Shows the complete flow from MCP client request through symbol resolution
 %% to LSP server interaction and response formatting.
-%% All LSP logic lives in the single LSPClient class (lsp-client.ts).
+%% Tool handler (src/tools/navigation.ts) delegates to LSPClient facade,
+%% which delegates to operations.ts and ServerManager.
 
 sequenceDiagram
     participant MC as MCP Client
-    participant IT as index.ts<br/>CallToolRequestSchema
-    participant LC as LSPClient<br/>(lsp-client.ts)
+    participant IT as index.ts<br/>MCP Server + Tool Registration
+    participant TH as navigation.ts<br/>(src/tools/)
+    participant LC as LSPClient Facade<br/>(src/lsp-client.ts)
+    participant OP as operations.ts<br/>(src/lsp/)
+    participant SM as ServerManager<br/>(src/lsp/)
+    participant DM as DocumentManager<br/>(src/lsp/)
+    participant TR as JsonRpcTransport<br/>(src/lsp/)
     participant LS as LSP Server Process
 
     MC->>IT: CallToolRequest<br/>find_definition(file_path, symbol_name, symbol_kind)
 
-    Note over IT: resolve(file_path) to absolute path
+    Note over IT: registry dispatches to<br/>findDefinitionTool.handler
 
-    IT->>LC: findSymbolsByName(absolutePath, symbolName, symbolKind)
+    IT->>TH: handler(args, client)
+    Note over TH: resolvePath(file_path)
 
-    Note over LC: getDocumentSymbols(filePath) internally
+    TH->>LC: findSymbolsByName(absolutePath, symbolName, symbolKind)
 
-    LC->>LC: getServer(filePath)
+    Note over LC: LSPClient calls this.getServer(filePath)<br/>to obtain ServerState before delegating
+
+    LC->>SM: getServer(filePath)
 
     alt Server not running
-        LC->>LC: getServerForFile(filePath)<br/>match extension to config
-        LC->>LS: spawn(command, args)
-        Note over LC: adapterRegistry.getAdapter(config)
-        LC->>LS: sendRequest("initialize", params)<br/>via Content-Length + JSON-RPC
-        LS-->>LC: initialize result
-        LC->>LS: sendNotification("initialized", {})
-        Note over LC: Wait for initialized (3s timeout)
-        LC->>LC: setupRestartTimer()
+        SM->>SM: getServerForFile(filePath)<br/>match extension to config
+        SM->>LS: spawn(command, args)
+        Note over SM: adapterRegistry.getAdapter(config)
+        SM->>TR: sendRequest("initialize", params)
+        TR->>LS: Content-Length + JSON-RPC
+        LS-->>TR: initialize result
+        TR-->>SM: initialize result
+        SM->>TR: sendNotification("initialized", {})
+        Note over SM: Wait for initialized (3s timeout)
+        SM->>SM: setupRestartTimer()
     else Server already running
-        Note over LC: Return existing ServerState
+        Note over SM: Return existing ServerState
     end
 
-    LC->>LC: ensureFileOpen(filePath)
+    SM-->>LC: ServerState
+
+    LC->>OP: opsFindSymbolsByName(serverState, filePath, symbolName, symbolKind)
+
+    Note over OP: getDocumentSymbols(filePath) internally
+
+    OP->>DM: ensureFileOpen(filePath, serverState)
 
     alt File not yet open
-        LC->>LS: sendNotification("textDocument/didOpen", content)
-        Note over LC: Wait 200ms for server to index
+        DM->>TR: sendNotification("textDocument/didOpen", content)
+        Note over DM: Wait 200ms for server to index
     end
 
-    LC->>LS: sendRequest("textDocument/documentSymbol")<br/>via Content-Length + JSON-RPC
-    LS-->>LC: DocumentSymbol[] response
+    OP->>TR: sendRequest("textDocument/documentSymbol")
+    TR->>LS: Content-Length + JSON-RPC
+    LS-->>TR: DocumentSymbol[] response
+    TR-->>OP: DocumentSymbol[] response
 
-    Note over LC: flattenDocumentSymbols()<br/>match by name + kind<br/>fallback if kind not found
+    Note over OP: flattenDocumentSymbols()<br/>match by name + kind<br/>fallback if kind not found
 
-    LC-->>IT: { matches: SymbolMatch[], warning? }
+    OP-->>LC: { matches: SymbolMatch[], warning? }
+    LC-->>TH: { matches: SymbolMatch[], warning? }
 
     loop For each matching symbol
-        IT->>LC: findDefinition(absolutePath, match.position)
-        LC->>LC: ensureFileOpen + await initializationPromise
-        LC->>LS: sendRequest("textDocument/definition")<br/>timeout from adapter.getTimeout() or 30s default
-        LS-->>LC: Location[] response
-        LC-->>IT: Location[]
-        Note over IT: Format: uriToPath(uri):line+1:char+1
+        TH->>LC: findDefinition(absolutePath, match.position)
+        Note over LC: this.getServer(filePath) -> serverState
+        LC->>OP: opsFindDefinition(serverState, filePath, position)
+        OP->>DM: ensureFileOpen + await initializationPromise
+        OP->>TR: sendRequest("textDocument/definition")<br/>timeout from adapter.getTimeout() or 30s default
+        TR->>LS: Content-Length + JSON-RPC
+        LS-->>TR: Location[] response
+        TR-->>OP: Location[]
+        OP-->>LC: Location[]
+        LC-->>TH: Location[]
+        Note over TH: formatLocations():<br/>uriToPath(uri):line+1:char+1
     end
 
+    TH-->>IT: ToolResult
     IT-->>MC: MCP Response<br/>{ content: [{ type: "text", text: results }] }

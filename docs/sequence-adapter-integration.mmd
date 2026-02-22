@@ -1,77 +1,81 @@
-%% Sequence Diagram: Adapter Integration (CURRENT ARCHITECTURE)
+%% Sequence Diagram: Adapter Integration (POST-REFACTOR)
 %%
 %% Shows how the adapter system handles non-standard LSP server behavior,
 %% using the Vue Language Server adapter as the primary example.
-%% Adapter detection and dispatch happens within LSPClient (lsp-client.ts).
+%% Adapter detection happens in ServerManager (src/lsp/server-manager.ts).
+%% Adapter types (ServerAdapter interface, ServerState) live in src/lsp/types.ts.
 
 sequenceDiagram
-    participant LC as LSPClient<br/>(lsp-client.ts)
+    participant SM as ServerManager<br/>(server-manager.ts)
     participant AR as AdapterRegistry<br/>(adapters/registry.ts)
     participant VA as VueAdapter<br/>(adapters/vue.ts)
     participant PA as PyrightAdapter<br/>(adapters/pyright.ts)
+    participant TR as JsonRpcTransport<br/>(json-rpc.ts)
     participant VS as Vue Language Server
     participant PS as Pyright Server
 
-    Note over LC,PS: === ADAPTER AUTO-DETECTION (during startServer) ===
+    Note over SM,PS: === ADAPTER AUTO-DETECTION (during startServer) ===
 
-    LC->>AR: getAdapter(serverConfig)
+    SM->>AR: getAdapter(serverConfig)
 
     alt Command contains "vue-language-server"
         AR->>VA: matches(config)?
         VA-->>AR: true (first match wins)
-        AR-->>LC: VueLanguageServerAdapter
-        Note over LC: adapter stored in ServerState
+        AR-->>SM: VueLanguageServerAdapter
+        Note over SM: adapter stored in ServerState
     else Command contains "pyright" or "basedpyright"
         AR->>VA: matches(config)?
         VA-->>AR: false
         AR->>PA: matches(config)?
         PA-->>AR: true
-        AR-->>LC: PyrightAdapter
+        AR-->>SM: PyrightAdapter
     else No adapter matches
-        AR-->>LC: undefined (standard LSP behavior)
+        AR-->>SM: undefined (standard LSP behavior)
     end
 
-    Note over LC,PS: === VUE ADAPTER: CUSTOM SERVER-TO-CLIENT REQUEST ===
+    Note over SM,PS: === VUE ADAPTER: CUSTOM SERVER-TO-CLIENT REQUEST ===
 
-    VS->>LC: tsserver/request (server-to-client request)<br/>JSON-RPC message with id<br/>[id, "_vue:projectInfo", params]
+    VS->>TR: tsserver/request (server-to-client request)<br/>JSON-RPC message with id<br/>[id, "_vue:projectInfo", params]
+    TR->>SM: handleMessage()
 
-    Note over LC: handleMessage() checks:<br/>1. message.id exists (it is a request)<br/>2. adapter.handleRequest is defined
+    Note over SM: handleMessage() checks:<br/>1. message.id exists (it is a request)<br/>2. adapter.handleRequest is defined
 
-    LC->>VA: handleRequest("tsserver/request", params, state)
-    VA-->>LC: [id, { configFiles: [], sourceFiles: [] }]
-    LC->>VS: sendMessage({ jsonrpc: "2.0", id, result })<br/>JSON-RPC response back to server
+    SM->>VA: handleRequest("tsserver/request", params, state)
+    VA-->>SM: [id, { configFiles: [], sourceFiles: [] }]
+    SM->>TR: sendMessage({ jsonrpc: "2.0", id, result })<br/>JSON-RPC response back to server
+    TR->>VS: Content-Length + JSON-RPC response
 
-    Note over LC,PS: === VUE ADAPTER: CUSTOM TIMEOUTS ===
+    Note over SM,PS: === VUE ADAPTER: CUSTOM TIMEOUTS ===
 
-    Note over LC: Tool handler calls findDefinition
-    LC->>VA: getTimeout("textDocument/definition")
-    VA-->>LC: 45000ms (instead of default 30000ms)
-    LC->>VS: sendRequest("textDocument/definition", params, 45000)
-    VS-->>LC: Location[] (may take up to 45s)
+    Note over SM: Tool handler calls findDefinition
+    SM->>VA: getTimeout("textDocument/definition")
+    VA-->>SM: 45000ms (instead of default 30000ms)
+    SM->>TR: sendRequest("textDocument/definition", params, 45000)
+    TR->>VS: Content-Length + JSON-RPC
+    VS-->>TR: Location[] (may take up to 45s)
+    TR-->>SM: Location[]
 
-    Note over LC,PS: === PYRIGHT ADAPTER: EXTENDED TIMEOUTS ===
+    Note over SM,PS: === PYRIGHT ADAPTER: EXTENDED TIMEOUTS ===
 
-    Note over LC: Tool handler calls findReferences
-    LC->>PA: getTimeout("textDocument/references")
-    PA-->>LC: 60000ms (instead of default 30000ms)
-    LC->>PS: sendRequest("textDocument/references", params, 60000)
-    PS-->>LC: Location[] (large project may be slow)
+    Note over SM: Tool handler calls findReferences
+    SM->>PA: getTimeout("textDocument/references")
+    PA-->>SM: 60000ms (instead of default 30000ms)
+    SM->>TR: sendRequest("textDocument/references", params, 60000)
+    TR->>PS: Content-Length + JSON-RPC
+    PS-->>TR: Location[] (large project may be slow)
+    TR-->>SM: Location[]
 
-    Note over LC,PS: === STANDARD NOTIFICATION HANDLING ===
+    Note over SM,PS: === STANDARD NOTIFICATION HANDLING ===
 
-    VS->>LC: textDocument/publishDiagnostics (notification, no id)
+    VS->>TR: textDocument/publishDiagnostics (notification, no id)
+    TR->>SM: handleMessage()
 
-    Note over LC: handleMessage() checks:<br/>1. No message.id (it is a notification)<br/>2. adapter.handleNotification defined
+    Note over SM: handleMessage() checks:<br/>1. No message.id (it is a notification)<br/>2. adapter.handleNotification defined
 
     alt adapter.handleNotification defined
-        LC->>VA: handleNotification("textDocument/publishDiagnostics", params, state)
-        VA-->>LC: false (not handled by adapter)
+        SM->>VA: handleNotification("textDocument/publishDiagnostics", params, state)
+        VA-->>SM: false (not handled by adapter)
     end
 
-    Note over LC: Fall through to standard handling
-    LC->>LC: Store diagnostics in serverState.diagnostics Map<br/>Update lastDiagnosticUpdate and diagnosticVersions
-
-    Note over LC,PS: === DEAD CODE: UNUSED ADAPTER HOOKS ===
-
-    Note over PA: PyrightAdapter.customizeInitializeParams<br/>is defined but startServer() never calls it.<br/>This is a known gap (W6 in consensus).
-    Note over VA: ServerAdapter.isMethodSupported and<br/>provideFallback are defined in the interface<br/>but never checked by LSPClient.
+    Note over SM: Fall through to standard handling
+    SM->>SM: Store diagnostics in serverState.diagnostics Map<br/>Update lastDiagnosticUpdate and diagnosticVersions
