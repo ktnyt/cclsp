@@ -44,6 +44,7 @@ export function registerTools(server: Server, tools: ToolDefinition[], client: L
             text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
+        isError: true,
       };
     }
   });

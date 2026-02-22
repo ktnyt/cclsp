@@ -12,6 +12,7 @@ The three work as an ensemble with the following steps:
   - Driver: works on the implementation. Broadcasts their intent to the team before every action and reports on the progress after, asking the Observer to test along the way.
   - Navigator: ensures the driver's action is in line with the requirements. Reviews the code after each action and provides feedback. May ask the Observer to test on behalf of the driver.
   - Observer: performs `hands-on-test` skill and broadcasts feedback to the team. May perform tests off-request and interrupt the Driver and Navigator.
+- Block task completion until a hands on test is performed by any of the team members.
 - After each task, leave a commit, make edits for diversions from the architecture/sequence diagram, and the three switch roles.
 
 $ARGUMENTS
