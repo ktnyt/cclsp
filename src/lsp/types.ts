@@ -31,9 +31,6 @@ export {
 
 import type { ChildProcess } from 'node:child_process';
 import type { Diagnostic, LSPError, LSPServerConfig } from '../types.js';
-import type { DiagnosticsCache } from './diagnostics.js';
-import type { DocumentManager } from './document-manager.js';
-import type { JsonRpcTransport } from './json-rpc.js';
 
 /**
  * JSON-RPC message format used for LSP communication.
@@ -50,18 +47,43 @@ export interface LSPMessage {
 /**
  * State of a running LSP server process.
  * Single source of truth -- do NOT duplicate this interface elsewhere.
+ *
+ * transport, documentManager, and diagnosticsCache use structural types
+ * rather than concrete class imports to keep types.ts as a dependency leaf
+ * (no imports from sibling lsp/ modules that import back from here).
  */
 export interface ServerState {
   process: ChildProcess;
-  transport: JsonRpcTransport;
-  documentManager: DocumentManager;
+  transport: {
+    sendRequest(method: string, params: unknown, timeout?: number): Promise<unknown>;
+    sendMessage(message: LSPMessage): void;
+    sendNotification(method: string, params: unknown): void;
+    rejectAllPending(reason: string): void;
+  };
+  documentManager: {
+    ensureOpen(filePath: string): Promise<boolean>;
+    sendChange(filePath: string, text: string): void;
+    isOpen(filePath: string): boolean;
+    getVersion(filePath: string): number;
+  };
   initialized: boolean;
   initializationPromise: Promise<void>;
   startTime: number;
   config: LSPServerConfig;
   restartTimer?: NodeJS.Timeout;
   initializationResolve?: () => void;
-  diagnosticsCache: DiagnosticsCache;
+  diagnosticsCache: {
+    update(uri: string, items: Diagnostic[], version?: number): void;
+    get(uri: string): Diagnostic[] | undefined;
+    waitForIdle(
+      uri: string,
+      options?: {
+        maxWaitTime?: number;
+        idleTime?: number;
+        checkInterval?: number;
+      }
+    ): Promise<void>;
+  };
   adapter?: ServerAdapter;
 }
 
