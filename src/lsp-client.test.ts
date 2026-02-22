@@ -51,6 +51,14 @@ const TEST_DIR = join(tmpdir(), 'cclsp-test');
 
 const TEST_CONFIG_PATH = join(TEST_DIR, 'test-config.json');
 
+// Platform-neutral absolute paths for test fixtures
+const MOCK_TEST_TS = join(tmpdir(), 'test.ts');
+const MOCK_IMPL_TS = join(tmpdir(), 'impl.ts');
+const MOCK_IMPL1_TS = join(tmpdir(), 'impl1.ts');
+const MOCK_IMPL2_TS = join(tmpdir(), 'impl2.ts');
+const MOCK_CALLER1_TS = join(tmpdir(), 'caller1.ts');
+const MOCK_CALLEE1_TS = join(tmpdir(), 'callee1.ts');
+
 describe('LSPClient', () => {
   beforeEach(async () => {
     // Ensure CCLSP_CONFIG_PATH is truly unset to avoid cross-test contamination.
@@ -874,11 +882,11 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.getDiagnostics('/test.ts');
+      const result = await client.getDiagnostics(MOCK_TEST_TS);
 
       expect(result).toEqual(mockDiagnostics);
       expect(mockTransport.sendRequest).toHaveBeenCalledWith('textDocument/diagnostic', {
-        textDocument: { uri: pathToUri('/test.ts') },
+        textDocument: { uri: pathToUri(MOCK_TEST_TS) },
       });
 
       getServerSpy.mockRestore();
@@ -908,7 +916,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.getDiagnostics('/test.ts');
+      const result = await client.getDiagnostics(MOCK_TEST_TS);
 
       expect(result).toEqual([]);
 
@@ -935,7 +943,7 @@ describe('LSPClient', () => {
         initialized: true,
         documentManager: createMockDocumentManager(),
         diagnosticsCache: createMockDiagnosticsCache(
-          new Map([[pathToUri('/test.ts'), mockDiagnostics]])
+          new Map([[pathToUri(MOCK_TEST_TS), mockDiagnostics]])
         ),
       };
 
@@ -948,7 +956,7 @@ describe('LSPClient', () => {
       process.env.CCLSP_LOG_LEVEL = 'debug';
 
       try {
-        const result = await client.getDiagnostics('/test.ts');
+        const result = await client.getDiagnostics(MOCK_TEST_TS);
 
         expect(result).toEqual(mockDiagnostics);
         expect(stderrSpy).toHaveBeenCalledWith(
@@ -991,7 +999,7 @@ describe('LSPClient', () => {
       process.env.CCLSP_LOG_LEVEL = 'debug';
 
       try {
-        const result = await client.getDiagnostics('/test.ts');
+        const result = await client.getDiagnostics(MOCK_TEST_TS);
 
         expect(result).toEqual([]);
         expect(stderrSpy).toHaveBeenCalledWith(
@@ -1029,7 +1037,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.getDiagnostics('/test.ts');
+      const result = await client.getDiagnostics(MOCK_TEST_TS);
 
       expect(result).toEqual([]);
 
@@ -1067,13 +1075,16 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.hover('/test.ts', { line: 0, character: 5 });
+      const result = await client.hover(MOCK_TEST_TS, {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toEqual(mockHoverResult);
       expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/hover',
         {
-          textDocument: { uri: pathToUri('/test.ts') },
+          textDocument: { uri: pathToUri(MOCK_TEST_TS) },
           position: { line: 0, character: 5 },
         },
         30000
@@ -1103,7 +1114,10 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.hover('/test.ts', { line: 0, character: 5 });
+      const result = await client.hover(MOCK_TEST_TS, {
+        line: 0,
+        character: 5,
+      });
 
       expect(result).toBeNull();
 
@@ -1120,7 +1134,7 @@ describe('LSPClient', () => {
           name: 'testFunction',
           kind: 12, // Function
           location: {
-            uri: pathToUri('/test.ts'),
+            uri: pathToUri(MOCK_TEST_TS),
             range: {
               start: { line: 0, character: 0 },
               end: { line: 0, character: 20 },
@@ -1131,7 +1145,7 @@ describe('LSPClient', () => {
           name: 'testClass',
           kind: 5, // Class
           location: {
-            uri: pathToUri('/test.ts'),
+            uri: pathToUri(MOCK_TEST_TS),
             range: {
               start: { line: 10, character: 0 },
               end: { line: 10, character: 15 },
@@ -1203,14 +1217,14 @@ describe('LSPClient', () => {
 
       const mockLocations = [
         {
-          uri: pathToUri('/impl1.ts'),
+          uri: pathToUri(MOCK_IMPL1_TS),
           range: {
             start: { line: 5, character: 0 },
             end: { line: 5, character: 20 },
           },
         },
         {
-          uri: pathToUri('/impl2.ts'),
+          uri: pathToUri(MOCK_IMPL2_TS),
           range: {
             start: { line: 10, character: 0 },
             end: { line: 10, character: 25 },
@@ -1236,7 +1250,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.findImplementation('/test.ts', {
+      const result = await client.findImplementation(MOCK_TEST_TS, {
         line: 0,
         character: 5,
       });
@@ -1245,7 +1259,7 @@ describe('LSPClient', () => {
       expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/implementation',
         {
-          textDocument: { uri: pathToUri('/test.ts') },
+          textDocument: { uri: pathToUri(MOCK_TEST_TS) },
           position: { line: 0, character: 5 },
         },
         30000
@@ -1258,7 +1272,7 @@ describe('LSPClient', () => {
       const client = new LSPClient(TEST_CONFIG_PATH);
 
       const mockLocation = {
-        uri: pathToUri('/impl.ts'),
+        uri: pathToUri(MOCK_IMPL_TS),
         range: {
           start: { line: 5, character: 0 },
           end: { line: 5, character: 20 },
@@ -1283,7 +1297,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.findImplementation('/test.ts', {
+      const result = await client.findImplementation(MOCK_TEST_TS, {
         line: 0,
         character: 5,
       });
@@ -1314,7 +1328,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.findImplementation('/test.ts', {
+      const result = await client.findImplementation(MOCK_TEST_TS, {
         line: 0,
         character: 5,
       });
@@ -1333,7 +1347,7 @@ describe('LSPClient', () => {
         {
           name: 'testFunction',
           kind: 12, // Function
-          uri: pathToUri('/test.ts'),
+          uri: pathToUri(MOCK_TEST_TS),
           range: {
             start: { line: 0, character: 0 },
             end: { line: 0, character: 20 },
@@ -1363,7 +1377,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.prepareCallHierarchy('/test.ts', {
+      const result = await client.prepareCallHierarchy(MOCK_TEST_TS, {
         line: 0,
         character: 5,
       });
@@ -1372,7 +1386,7 @@ describe('LSPClient', () => {
       expect(mockTransport.sendRequest).toHaveBeenCalledWith(
         'textDocument/prepareCallHierarchy',
         {
-          textDocument: { uri: pathToUri('/test.ts') },
+          textDocument: { uri: pathToUri(MOCK_TEST_TS) },
           position: { line: 0, character: 5 },
         },
         30000
@@ -1402,7 +1416,7 @@ describe('LSPClient', () => {
         'getServer'
       ).mockResolvedValue(mockServerState);
 
-      const result = await client.prepareCallHierarchy('/test.ts', {
+      const result = await client.prepareCallHierarchy(MOCK_TEST_TS, {
         line: 0,
         character: 5,
       });
@@ -1420,7 +1434,7 @@ describe('LSPClient', () => {
       const mockItem = {
         name: 'testFunction',
         kind: 12, // Function
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(MOCK_TEST_TS),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1436,7 +1450,7 @@ describe('LSPClient', () => {
           from: {
             name: 'caller1',
             kind: 12,
-            uri: pathToUri('/caller1.ts'),
+            uri: pathToUri(MOCK_CALLER1_TS),
             range: {
               start: { line: 5, character: 0 },
               end: { line: 5, character: 10 },
@@ -1491,7 +1505,7 @@ describe('LSPClient', () => {
       const mockItem = {
         name: 'testFunction',
         kind: 12,
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(MOCK_TEST_TS),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1535,7 +1549,7 @@ describe('LSPClient', () => {
       const mockItem = {
         name: 'testFunction',
         kind: 12, // Function
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(MOCK_TEST_TS),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },
@@ -1551,7 +1565,7 @@ describe('LSPClient', () => {
           to: {
             name: 'callee1',
             kind: 12,
-            uri: pathToUri('/callee1.ts'),
+            uri: pathToUri(MOCK_CALLEE1_TS),
             range: {
               start: { line: 10, character: 0 },
               end: { line: 10, character: 15 },
@@ -1606,7 +1620,7 @@ describe('LSPClient', () => {
       const mockItem = {
         name: 'testFunction',
         kind: 12,
-        uri: pathToUri('/test.ts'),
+        uri: pathToUri(MOCK_TEST_TS),
         range: {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 20 },

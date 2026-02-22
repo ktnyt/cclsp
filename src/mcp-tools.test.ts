@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, jest } from 'bun:test';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
 import { findDefinitionTool, findReferencesTool } from './tools/navigation.js';
 import { renameSymbolTool } from './tools/refactoring.js';
 import { pathToUri, uriToPath } from './utils.js';
+
+// Platform-neutral absolute paths for test fixtures
+const SRC_IMPL = join(tmpdir(), 'src', 'impl.ts');
+const SRC_CLASSES = join(tmpdir(), 'src', 'classes.ts');
+const SRC_TEST = join(tmpdir(), 'src', 'test.ts');
+const SRC_OTHER = join(tmpdir(), 'src', 'other.ts');
 
 type MockLSPClient = {
   findSymbolsByName: ReturnType<typeof jest.fn>;
@@ -62,7 +69,7 @@ describe('MCP Tool Handlers', () => {
 
       mockClient.findDefinition.mockResolvedValue([
         {
-          uri: pathToUri('/src/impl.ts'),
+          uri: pathToUri(SRC_IMPL),
           range: {
             start: { line: 10, character: 5 },
             end: { line: 10, character: 17 },
@@ -75,7 +82,7 @@ describe('MCP Tool Handlers', () => {
         asClient(mockClient)
       );
 
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl.ts'))}:11:6`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_IMPL))}:11:6`);
       expect(result.content[0]?.text).toContain('testFunction (function)');
       expect(mockClient.findSymbolsByName).toHaveBeenCalledWith(
         resolve('test.ts'),
@@ -101,7 +108,7 @@ describe('MCP Tool Handlers', () => {
 
       mockClient.findDefinition.mockResolvedValue([
         {
-          uri: pathToUri('/src/classes.ts'),
+          uri: pathToUri(SRC_CLASSES),
           range: {
             start: { line: 0, character: 0 },
             end: { line: 0, character: 10 },
@@ -165,7 +172,7 @@ describe('MCP Tool Handlers', () => {
 
       mockClient.findDefinition.mockResolvedValue([
         {
-          uri: pathToUri('/src/test.ts'),
+          uri: pathToUri(SRC_TEST),
           range: {
             start: { line: 0, character: 0 },
             end: { line: 0, character: 10 },
@@ -179,7 +186,7 @@ describe('MCP Tool Handlers', () => {
       );
 
       expect(result.content[0]?.text).toContain('No symbols found with kind "class"');
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/test.ts'))}:1:1`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_TEST))}:1:1`);
     });
 
     it('should handle findDefinition returning empty array', async () => {
@@ -226,14 +233,14 @@ describe('MCP Tool Handlers', () => {
 
       mockClient.findReferences.mockResolvedValue([
         {
-          uri: pathToUri('/src/test.ts'),
+          uri: pathToUri(SRC_TEST),
           range: {
             start: { line: 3, character: 6 },
             end: { line: 3, character: 11 },
           },
         },
         {
-          uri: pathToUri('/src/other.ts'),
+          uri: pathToUri(SRC_OTHER),
           range: {
             start: { line: 20, character: 3 },
             end: { line: 20, character: 8 },
@@ -246,8 +253,8 @@ describe('MCP Tool Handlers', () => {
         asClient(mockClient)
       );
 
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/test.ts'))}:4:7`);
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/other.ts'))}:21:4`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_TEST))}:4:7`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_OTHER))}:21:4`);
       expect(result.content[0]?.text).toContain('myVar (variable)');
     });
 
@@ -344,7 +351,7 @@ describe('MCP Tool Handlers', () => {
 
       mockClient.renameSymbol.mockResolvedValue({
         changes: {
-          [pathToUri('/src/test.ts')]: [
+          [pathToUri(SRC_TEST)]: [
             {
               range: {
                 start: { line: 5, character: 9 },
