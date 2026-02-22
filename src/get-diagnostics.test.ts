@@ -1,83 +1,39 @@
-import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, jest } from 'bun:test';
 import { resolve } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
+import { getDiagnosticsTool } from './tools/diagnostics.js';
 import type { Diagnostic } from './types.js';
 
-// Create a function that executes the handler logic
-async function createHandler(args: { file_path: string }, lspClient: { getDiagnostics: any }) {
-  const { file_path } = args;
-  const absolutePath = resolve(file_path);
+type MockLSPClient = {
+  getDiagnostics: ReturnType<typeof jest.fn>;
+};
 
-  try {
-    const diagnostics = await lspClient.getDiagnostics(absolutePath);
+function createMockClient(): MockLSPClient {
+  return {
+    getDiagnostics: jest.fn(),
+  };
+}
 
-    if (diagnostics.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `No diagnostics found for ${file_path}. The file has no errors, warnings, or hints.`,
-          },
-        ],
-      };
-    }
-
-    const severityMap: Record<number, string> = {
-      1: 'Error',
-      2: 'Warning',
-      3: 'Information',
-      4: 'Hint',
-    };
-
-    const diagnosticMessages = diagnostics.map((diag: Diagnostic) => {
-      const severity = diag.severity ? severityMap[diag.severity] || 'Unknown' : 'Unknown';
-      const code = diag.code ? ` [${diag.code}]` : '';
-      const source = diag.source ? ` (${diag.source})` : '';
-      const { start, end } = diag.range;
-
-      return `• ${severity}${code}${source}: ${diag.message}\n  Location: Line ${start.line + 1}, Column ${start.character + 1} to Line ${end.line + 1}, Column ${end.character + 1}`;
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Found ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'} in ${file_path}:\n\n${diagnosticMessages.join('\n\n')}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting diagnostics: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-    };
-  }
+function callHandler(args: { file_path: string }, mock: MockLSPClient) {
+  return getDiagnosticsTool.handler(args as Record<string, unknown>, mock as unknown as LSPClient);
 }
 
 describe('get_diagnostics MCP tool', () => {
-  let mockLspClient: {
-    getDiagnostics: ReturnType<typeof spyOn>;
-  };
+  let mockClient: MockLSPClient;
 
   beforeEach(() => {
-    mockLspClient = {
-      getDiagnostics: spyOn({} as LSPClient, 'getDiagnostics'),
-    };
+    mockClient = createMockClient();
   });
 
   it('should return message when no diagnostics found', async () => {
-    mockLspClient.getDiagnostics.mockResolvedValue([]);
+    mockClient.getDiagnostics.mockResolvedValue([]);
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toBe(
+    expect(result.content[0]?.text).toBe(
       'No diagnostics found for test.ts. The file has no errors, warnings, or hints.'
     );
-    expect(mockLspClient.getDiagnostics).toHaveBeenCalledWith(resolve('test.ts'));
+    expect(mockClient.getDiagnostics).toHaveBeenCalledWith(resolve('test.ts'));
   });
 
   it('should format single diagnostic correctly', async () => {
@@ -87,20 +43,20 @@ describe('get_diagnostics MCP tool', () => {
           start: { line: 0, character: 5 },
           end: { line: 0, character: 10 },
         },
-        severity: 1, // Error
+        severity: 1,
         message: 'Undefined variable',
         code: 'TS2304',
         source: 'typescript',
       },
     ];
 
-    mockLspClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
+    mockClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toContain('Found 1 diagnostic in test.ts:');
-    expect(result?.content[0]?.text).toContain('• Error [TS2304] (typescript): Undefined variable');
-    expect(result?.content[0]?.text).toContain('Location: Line 1, Column 6 to Line 1, Column 11');
+    expect(result.content[0]?.text).toContain('Found 1 diagnostic in test.ts:');
+    expect(result.content[0]?.text).toContain('Error [TS2304] (typescript): Undefined variable');
+    expect(result.content[0]?.text).toContain('Location: Line 1, Column 6 to Line 1, Column 11');
   });
 
   it('should format multiple diagnostics correctly', async () => {
@@ -110,7 +66,7 @@ describe('get_diagnostics MCP tool', () => {
           start: { line: 0, character: 0 },
           end: { line: 0, character: 5 },
         },
-        severity: 1, // Error
+        severity: 1,
         message: 'Missing semicolon',
         code: '1003',
         source: 'typescript',
@@ -120,7 +76,7 @@ describe('get_diagnostics MCP tool', () => {
           start: { line: 2, character: 10 },
           end: { line: 2, character: 15 },
         },
-        severity: 2, // Warning
+        severity: 2,
         message: 'Unused variable',
         source: 'eslint',
       },
@@ -129,7 +85,7 @@ describe('get_diagnostics MCP tool', () => {
           start: { line: 5, character: 0 },
           end: { line: 5, character: 20 },
         },
-        severity: 3, // Information
+        severity: 3,
         message: 'Consider using const',
       },
       {
@@ -137,21 +93,21 @@ describe('get_diagnostics MCP tool', () => {
           start: { line: 10, character: 4 },
           end: { line: 10, character: 8 },
         },
-        severity: 4, // Hint
+        severity: 4,
         message: 'Add type annotation',
         code: 'no-implicit-any',
       },
     ];
 
-    mockLspClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
+    mockClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
 
-    const result = await createHandler({ file_path: 'src/main.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'src/main.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toContain('Found 4 diagnostics in src/main.ts:');
-    expect(result?.content[0]?.text).toContain('• Error [1003] (typescript): Missing semicolon');
-    expect(result?.content[0]?.text).toContain('• Warning (eslint): Unused variable');
-    expect(result?.content[0]?.text).toContain('• Information: Consider using const');
-    expect(result?.content[0]?.text).toContain('• Hint [no-implicit-any]: Add type annotation');
+    expect(result.content[0]?.text).toContain('Found 4 diagnostics in src/main.ts:');
+    expect(result.content[0]?.text).toContain('Error [1003] (typescript): Missing semicolon');
+    expect(result.content[0]?.text).toContain('Warning (eslint): Unused variable');
+    expect(result.content[0]?.text).toContain('Information: Consider using const');
+    expect(result.content[0]?.text).toContain('Hint [no-implicit-any]: Add type annotation');
   });
 
   it('should handle diagnostics without optional fields', async () => {
@@ -162,41 +118,40 @@ describe('get_diagnostics MCP tool', () => {
           end: { line: 0, character: 10 },
         },
         message: 'Basic error message',
-        // No severity, code, or source
       },
     ];
 
-    mockLspClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
+    mockClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toContain('• Unknown: Basic error message');
-    expect(result?.content[0]?.text).not.toContain('[');
-    expect(result?.content[0]?.text).not.toContain('(');
+    expect(result.content[0]?.text).toContain('Unknown: Basic error message');
+    expect(result.content[0]?.text).not.toContain('[');
+    expect(result.content[0]?.text).not.toContain('(');
   });
 
   it('should handle absolute file paths', async () => {
-    mockLspClient.getDiagnostics.mockResolvedValue([]);
+    mockClient.getDiagnostics.mockResolvedValue([]);
 
-    await createHandler({ file_path: '/absolute/path/to/file.ts' }, mockLspClient);
+    await callHandler({ file_path: '/absolute/path/to/file.ts' }, mockClient);
 
-    expect(mockLspClient.getDiagnostics).toHaveBeenCalledWith(resolve('/absolute/path/to/file.ts'));
+    expect(mockClient.getDiagnostics).toHaveBeenCalledWith(resolve('/absolute/path/to/file.ts'));
   });
 
   it('should handle error from getDiagnostics', async () => {
-    mockLspClient.getDiagnostics.mockRejectedValue(new Error('LSP server not available'));
+    mockClient.getDiagnostics.mockRejectedValue(new Error('LSP server not available'));
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toBe('Error getting diagnostics: LSP server not available');
+    expect(result.content[0]?.text).toBe('Error getting diagnostics: LSP server not available');
   });
 
   it('should handle non-Error exceptions', async () => {
-    mockLspClient.getDiagnostics.mockRejectedValue('Unknown error');
+    mockClient.getDiagnostics.mockRejectedValue('Unknown error');
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    expect(result?.content[0]?.text).toBe('Error getting diagnostics: Unknown error');
+    expect(result.content[0]?.text).toBe('Error getting diagnostics: Unknown error');
   });
 
   it('should convert 0-indexed line and character to 1-indexed for display', async () => {
@@ -211,11 +166,10 @@ describe('get_diagnostics MCP tool', () => {
       },
     ];
 
-    mockLspClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
+    mockClient.getDiagnostics.mockResolvedValue(mockDiagnostics);
 
-    const result = await createHandler({ file_path: 'test.ts' }, mockLspClient);
+    const result = await callHandler({ file_path: 'test.ts' }, mockClient);
 
-    // 0-indexed (0, 0) should be displayed as 1-indexed (1, 1)
-    expect(result?.content[0]?.text).toContain('Location: Line 1, Column 1 to Line 1, Column 1');
+    expect(result.content[0]?.text).toContain('Location: Line 1, Column 1 to Line 1, Column 1');
   });
 });

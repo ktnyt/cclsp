@@ -9,6 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { logger } from './logger.js';
 import type { LSPClient } from './lsp-client.js';
 import { uriToPath } from './utils.js';
 
@@ -116,9 +117,7 @@ export async function applyWorkspaceEdit(
       const originalStats = lstatSync(originalPath);
       if (originalStats.isSymbolicLink()) {
         targetPath = realpathSync(originalPath);
-        process.stderr.write(
-          `[DEBUG] Editing symlink target: ${targetPath} (via ${originalPath})\n`
-        );
+        logger.debug(`Editing symlink target: ${targetPath} (via ${originalPath})\n`);
       }
 
       // Read content from the actual file (symlink target or regular file)

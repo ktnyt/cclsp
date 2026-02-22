@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyWorkspaceEdit } from './file-editor.js';
 import { pathToUri } from './utils.js';
 
-const TEST_DIR = process.env.CI
-  ? `${process.cwd()}/test-tmp/file-editor-rollback-test`
-  : '/tmp/file-editor-rollback-test';
+const TEST_DIR = join(tmpdir(), 'file-editor-rollback-test');
 
 describe.skipIf(!!process.env.CI)('file-editor rollback without backups', () => {
   beforeEach(() => {

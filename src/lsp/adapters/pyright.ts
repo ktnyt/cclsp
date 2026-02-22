@@ -1,5 +1,5 @@
 import type { LSPServerConfig } from '../../types.js';
-import type { InitializeParams, ServerAdapter } from './types.js';
+import type { InitializeParams, ServerAdapter } from '../types.js';
 
 /**
  * Adapter for Pyright Language Server.

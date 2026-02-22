@@ -3,6 +3,7 @@ import { constants, access } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import ignore from 'ignore';
 import type { LanguageServerConfig } from './language-servers.js';
+import { logger } from './logger.js';
 
 // Default ignore patterns
 const DEFAULT_IGNORE_PATTERNS = [
@@ -78,7 +79,7 @@ export async function scanDirectoryForExtensions(
     try {
       const entries = await readdir(currentPath);
       if (debug) {
-        process.stderr.write(
+        logger.debug(
           `Scanning directory ${currentPath} (depth: ${currentDepth}), found ${entries.length} entries: ${entries.join(', ')}\n`
         );
       }
@@ -91,7 +92,7 @@ export async function scanDirectoryForExtensions(
         const normalizedPath = entryRelativePath.replace(/\\/g, '/');
         if (ignoreFilter?.ignores(normalizedPath)) {
           if (debug) {
-            process.stderr.write(`Skipping ignored entry: ${entryRelativePath}\n`);
+            logger.debug(`Skipping ignored entry: ${entryRelativePath}\n`);
           }
           continue;
         }
@@ -101,27 +102,27 @@ export async function scanDirectoryForExtensions(
 
           if (fileStat.isDirectory()) {
             if (debug) {
-              process.stderr.write(`Recursing into directory: ${entryRelativePath}\n`);
+              logger.debug(`Recursing into directory: ${entryRelativePath}\n`);
             }
             await scanDirectory(fullPath, currentDepth + 1, entryRelativePath);
           } else if (fileStat.isFile()) {
             const ext = extname(entry).toLowerCase().slice(1); // Remove the dot
             if (debug) {
-              process.stderr.write(`Found file: ${entry}, extension: "${ext}"\n`);
+              logger.debug(`Found file: ${entry}, extension: "${ext}"\n`);
             }
             if (ext) {
               extensions.add(ext);
               if (debug) {
-                process.stderr.write(`Added extension: ${ext}\n`);
+                logger.debug(`Added extension: ${ext}\n`);
               }
             }
           }
         } catch (error) {
-          process.stderr.write(`Error processing ${fullPath}: ${error}\n`);
+          logger.error(`Error processing ${fullPath}: ${error}\n`);
         }
       }
     } catch (error) {
-      process.stderr.write(`Error reading directory ${currentPath}: ${error}\n`);
+      logger.error(`Error reading directory ${currentPath}: ${error}\n`);
       return;
     }
   }

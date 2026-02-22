@@ -1,21 +1,35 @@
-import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/cclsp-server-selection-test`
-  : '/tmp/cclsp-server-selection-test';
+const TEST_DIR = join(tmpdir(), 'cclsp-server-selection-test');
 
 const TEST_CONFIG_PATH = join(TEST_DIR, 'test-config.json');
 
 describe('LSPClient server selection', () => {
+  let savedConfigPath: string | undefined;
+
   beforeEach(() => {
+    // Save and clear CCLSP_CONFIG_PATH so tests use their own config files
+    savedConfigPath = process.env.CCLSP_CONFIG_PATH;
+    process.env.CCLSP_CONFIG_PATH = '';
+
     // Clean up test directory
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
     mkdirSync(TEST_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    // Restore CCLSP_CONFIG_PATH
+    if (savedConfigPath !== undefined) {
+      process.env.CCLSP_CONFIG_PATH = savedConfigPath;
+    } else {
+      process.env.CCLSP_CONFIG_PATH = '';
+    }
   });
 
   it('should select single matching server', () => {
@@ -34,7 +48,7 @@ describe('LSPClient server selection', () => {
 
     // Access private method for testing
     const getServerForFile = (client as any).getServerForFile.bind(client);
-    const server = getServerForFile('/some/path/test.ts');
+    const server = getServerForFile(join(tmpdir(), 'some', 'path', 'test.ts'));
 
     expect(server).toBeTruthy();
     expect(server.extensions).toContain('ts');
@@ -97,12 +111,13 @@ describe('LSPClient server selection', () => {
   });
 
   it('should handle absolute paths in rootDir', () => {
+    const absRoot = join(tmpdir(), 'abs-project');
     const testConfig = {
       servers: [
         {
           extensions: ['ts'],
           command: ['server-absolute', '--stdio'],
-          rootDir: '/absolute/path/to/project',
+          rootDir: absRoot,
         },
       ],
     };
@@ -111,7 +126,7 @@ describe('LSPClient server selection', () => {
     const client = new LSPClient(TEST_CONFIG_PATH);
     const getServerForFile = (client as any).getServerForFile.bind(client);
 
-    const server = getServerForFile('/absolute/path/to/project/src/test.ts');
+    const server = getServerForFile(join(absRoot, 'src', 'test.ts'));
 
     expect(server).toBeTruthy();
     expect(server.command[0]).toBe('server-absolute');
@@ -138,7 +153,7 @@ describe('LSPClient server selection', () => {
     const getServerForFile = (client as any).getServerForFile.bind(client);
 
     // File outside both rootDirs should fall back to first match
-    const server = getServerForFile('/completely/different/path/test.ts');
+    const server = getServerForFile(join(tmpdir(), 'completely', 'different', 'path', 'test.ts'));
 
     expect(server).toBeTruthy();
     expect(server.command[0]).toBe('server-one');
@@ -159,7 +174,7 @@ describe('LSPClient server selection', () => {
     const client = new LSPClient(TEST_CONFIG_PATH);
     const getServerForFile = (client as any).getServerForFile.bind(client);
 
-    const server = getServerForFile('/some/path/test.py');
+    const server = getServerForFile(join(tmpdir(), 'some', 'path', 'test.py'));
 
     expect(server).toBeNull();
   });

@@ -1,5 +1,6 @@
+import { logger } from '../../logger.js';
 import type { LSPServerConfig } from '../../types.js';
-import type { ServerAdapter, ServerState } from './types.js';
+import type { ServerAdapter, ServerState } from '../types.js';
 
 /**
  * Adapter for Vue Language Server (@vue/language-server).
@@ -27,9 +28,7 @@ export class VueLanguageServerAdapter implements ServerAdapter {
       const requestParams = params as [number, string, unknown];
       const [id, requestType] = requestParams;
 
-      process.stderr.write(
-        `[DEBUG VueAdapter] Handling tsserver/request: ${requestType} (id: ${id})\n`
-      );
+      logger.debug(`[DEBUG VueAdapter] Handling tsserver/request: ${requestType} (id: ${id})\n`);
 
       // Respond to project info requests
       if (requestType === '_vue:projectInfo') {

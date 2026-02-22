@@ -64,3 +64,6 @@ mcp/*/storage.json
 
 # Local claude settings
 .claude/settings.local.json
+
+# Docker local overrides
+compose.override.yml

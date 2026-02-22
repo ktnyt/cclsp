@@ -1,0 +1,23 @@
+services:
+  dev:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace
+      - claude-data:/home/cclsp/.claude
+      - claude-config:/home/cclsp/.config
+      - node-modules:/workspace/node_modules
+    environment:
+      - GITHUB_TOKEN
+      - GIT_AUTHOR_NAME
+      - GIT_AUTHOR_EMAIL
+      - GIT_COMMITTER_NAME
+      - GIT_COMMITTER_EMAIL
+      - CCLSP_CONFIG_PATH=.claude/cclsp.docker.json
+    command: dev-services.sh
+
+volumes:
+  claude-data:
+  claude-config:
+  node-modules:

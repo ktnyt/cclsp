@@ -1,0 +1,100 @@
+%% Post-Refactor Architecture - Component Overview
+%%
+%% This diagram shows the refactored cclsp architecture after decomposing
+%% the two god files into focused, single-responsibility modules.
+
+graph TB
+    subgraph "MCP Layer"
+        MCPClient["MCP Client<br/>(Claude Code)"]
+        IndexTS["index.ts<br/>(~50 lines)<br/>MCP Server Setup + Tool Registration"]
+        ToolRegistry["src/tools/registry.ts<br/>ToolDefinition type<br/>+ registration helpers"]
+    end
+
+    subgraph "Tool Handlers (src/tools/)"
+        Navigation["navigation.ts<br/>find_definition<br/>find_references<br/>find_implementation"]
+        Hover["hover.ts<br/>get_hover"]
+        Symbols["symbols.ts<br/>find_workspace_symbols<br/>prepare_call_hierarchy<br/>get_incoming_calls<br/>get_outgoing_calls"]
+        Refactoring["refactoring.ts<br/>rename_symbol<br/>rename_symbol_strict"]
+        Diagnostics["diagnostics.ts<br/>get_diagnostics"]
+        Server["server.ts<br/>restart_server"]
+        Helpers["helpers.ts<br/>resolvePath<br/>formatLocations<br/>textResult, withWarning"]
+    end
+
+    subgraph "LSP Facade"
+        LSPClient["src/lsp-client.ts<br/>LSPClient Facade<br/>(thin composition layer)"]
+    end
+
+    subgraph "LSP Internals (src/lsp/)"
+        Transport["json-rpc.ts<br/>JsonRpcTransport<br/>Content-Length framing<br/>request/response correlation"]
+        ServerMgr["server-manager.ts<br/>ServerManager<br/>spawn, init, restart<br/>dispose, concurrency"]
+        DocMgr["document-manager.ts<br/>DocumentManager<br/>didOpen, didChange<br/>didClose, versions"]
+        Operations["operations.ts<br/>LspOperations<br/>definition, references<br/>rename, hover, etc."]
+        DiagCache["diagnostics.ts<br/>DiagnosticsCache<br/>publishDiagnostics<br/>idle detection, polling"]
+        Config["config.ts<br/>Config loading<br/>+ validation (throws)"]
+        LSPTypes["types.ts<br/>ServerState (single source)<br/>LSPMessage"]
+    end
+
+    subgraph "Adapter System"
+        AdapterReg["adapters/registry.ts"]
+        VueAdapter["adapters/vue.ts"]
+        PyrightAdapter["adapters/pyright.ts"]
+    end
+
+    subgraph "Support Modules"
+        FileEditor["src/file-editor.ts"]
+        FileScanner["src/file-scanner.ts"]
+        Types["src/types.ts"]
+        Utils["src/utils.ts"]
+        Logger["src/logger.ts<br/>custom lightweight logger<br/>CCLSP_LOG_LEVEL env var"]
+        Version["src/version.ts<br/>dynamic package.json read"]
+    end
+
+    subgraph "LSP Server Processes"
+        TSServer["typescript-language-server"]
+        PyServer["pylsp / pyright"]
+        GoServer["gopls"]
+    end
+
+    MCPClient -->|"JSON-RPC over stdio"| IndexTS
+    IndexTS -->|"registers tools from"| ToolRegistry
+    ToolRegistry --> Navigation
+    ToolRegistry --> Hover
+    ToolRegistry --> Symbols
+    ToolRegistry --> Refactoring
+    ToolRegistry --> Diagnostics
+    ToolRegistry --> Server
+
+    Navigation --> Helpers
+    Refactoring --> Helpers
+    Symbols --> Helpers
+
+    Navigation --> LSPClient
+    Hover --> LSPClient
+    Symbols --> LSPClient
+    Refactoring --> LSPClient
+    Diagnostics --> LSPClient
+    Server --> LSPClient
+    Refactoring -->|"apply edits"| FileEditor
+
+    LSPClient --> ServerMgr
+    LSPClient --> DocMgr
+    LSPClient --> Operations
+    LSPClient --> DiagCache
+    LSPClient --> Config
+
+    ServerMgr --> Transport
+    ServerMgr --> AdapterReg
+    Operations --> Transport
+    DocMgr --> Transport
+    DiagCache --> Transport
+
+    ServerMgr -->|"spawn + JSON-RPC"| TSServer
+    ServerMgr -->|"spawn + JSON-RPC"| PyServer
+    ServerMgr -->|"spawn + JSON-RPC"| GoServer
+
+    AdapterReg --> VueAdapter
+    AdapterReg --> PyrightAdapter
+    VueAdapter -.->|"imports ServerState"| LSPTypes
+    PyrightAdapter -.->|"imports ServerState"| LSPTypes
+
+    FileEditor -->|"sync after edit"| LSPClient

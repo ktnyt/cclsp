@@ -1,0 +1,111 @@
+%% Sequence Diagram: LSP Server Lifecycle (POST-REFACTOR)
+%%
+%% Shows server start, auto-restart, manual restart, and dispose flows.
+%% Includes concurrency protection via serversStarting map.
+%% Preload and restart logic lives in LSPClient (src/lsp-client.ts).
+%% Server spawning and initialization lives in ServerManager (src/lsp/server-manager.ts).
+
+sequenceDiagram
+    participant IT as index.ts
+    participant LC as LSPClient Facade<br/>(src/lsp-client.ts)
+    participant SM as ServerManager<br/>(src/lsp/server-manager.ts)
+    participant AR as AdapterRegistry<br/>(adapters/registry.ts)
+    participant TR as JsonRpcTransport<br/>(src/lsp/json-rpc.ts)
+    participant LS as LSP Server Process
+    participant FS as FileScanner<br/>(file-scanner.ts)
+
+    Note over IT,FS: === SERVER PRELOAD (on startup) ===
+
+    IT->>LC: preloadServers()
+    Note over LC: preloadServers() lives in LSPClient<br/>scans directories, then delegates server start
+
+    LC->>FS: loadGitignore(serverDir)
+    LC->>FS: scanDirectoryForExtensions(serverDir, 3)
+    FS-->>LC: Set of found extensions
+
+    loop For each server config with matching extensions
+        LC->>SM: getServer(serverConfig)
+        SM->>LS: spawn(command, args, { stdio: pipe })
+        SM->>AR: getAdapter(serverConfig)
+        AR-->>SM: adapter or undefined
+
+        SM->>TR: sendRequest("initialize", params)<br/>via Content-Length + JSON-RPC
+        TR->>LS: JSON-RPC message
+        LS-->>TR: InitializeResult
+        TR-->>SM: InitializeResult
+        SM->>TR: sendNotification("initialized", {})
+
+        alt Server sends "initialized" notification
+            LS-->>TR: initialized notification
+            TR-->>SM: initialized notification
+            Note over SM: resolve initializationPromise
+        else Timeout after 3 seconds
+            Note over SM: Mark as initialized anyway
+        end
+
+        alt restartInterval configured
+            SM->>SM: setTimeout(restartServer, interval)
+            Note over SM: Timer stored in ServerState
+        end
+
+        Note over SM: Store in servers Map<br/>key = JSON.stringify(config)
+        SM-->>LC: ServerState
+    end
+
+    Note over IT,FS: === CONCURRENT ACCESS PROTECTION ===
+
+    par Request A arrives
+        IT->>LC: findDefinition("file.ts", pos)
+        LC->>SM: getServer("file.ts")
+        Note over SM: Server not in servers Map<br/>Not in serversStarting Map
+        SM->>SM: startServer(config)
+        Note over SM: Store promise in serversStarting Map
+    and Request B arrives simultaneously
+        IT->>LC: findReferences("file.ts", pos)
+        LC->>SM: getServer("file.ts")
+        Note over SM: Found promise in serversStarting Map<br/>Await existing promise
+    end
+    Note over SM: Same ServerState returned to both<br/>Move from serversStarting to servers Map
+
+    Note over IT,FS: === AUTO-RESTART (timer-based) ===
+
+    Note over SM: restartInterval timer fires<br/>restartServer(serverState) called
+    SM->>SM: clearTimeout(restartTimer)
+    SM->>LS: process.kill()
+    SM->>SM: servers.delete(key)
+    SM->>SM: startServer(config)
+    SM->>LS: spawn new process
+    SM->>TR: sendRequest("initialize")
+    TR->>LS: JSON-RPC message
+    LS-->>TR: InitializeResult
+    TR-->>SM: InitializeResult
+    Note over SM: New ServerState replaces old in servers Map
+
+    Note over IT,FS: === MANUAL RESTART ===
+
+    IT->>LC: restartServers(["ts", "tsx"])
+    Note over LC: restartServers() lives in LSPClient<br/>iterates servers, disposes, re-gets
+
+    loop For each server with matching extensions
+        LC->>LC: clearTimeout(state.restartTimer)
+        LC->>LC: state.process.kill()
+        LC->>SM: getRunningServers().delete(key)
+        LC->>SM: getServer(config)
+        SM->>LS: spawn new process
+        SM-->>LC: new ServerState
+    end
+
+    LC-->>IT: { success, restarted[], failed[], message }
+
+    Note over IT,FS: === DISPOSE (shutdown) ===
+
+    Note over IT: SIGINT or SIGTERM received
+    IT->>LC: dispose()
+    LC->>SM: dispose()
+
+    loop For each server in servers Map
+        SM->>SM: clearTimeout(restartTimer)
+        SM->>LS: process.kill()
+    end
+
+    SM->>SM: servers.clear()

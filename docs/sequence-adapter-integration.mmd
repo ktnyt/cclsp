@@ -1,0 +1,81 @@
+%% Sequence Diagram: Adapter Integration (POST-REFACTOR)
+%%
+%% Shows how the adapter system handles non-standard LSP server behavior,
+%% using the Vue Language Server adapter as the primary example.
+%% Adapter detection happens in ServerManager (src/lsp/server-manager.ts).
+%% Adapter types (ServerAdapter interface, ServerState) live in src/lsp/types.ts.
+
+sequenceDiagram
+    participant SM as ServerManager<br/>(server-manager.ts)
+    participant AR as AdapterRegistry<br/>(adapters/registry.ts)
+    participant VA as VueAdapter<br/>(adapters/vue.ts)
+    participant PA as PyrightAdapter<br/>(adapters/pyright.ts)
+    participant TR as JsonRpcTransport<br/>(json-rpc.ts)
+    participant VS as Vue Language Server
+    participant PS as Pyright Server
+
+    Note over SM,PS: === ADAPTER AUTO-DETECTION (during startServer) ===
+
+    SM->>AR: getAdapter(serverConfig)
+
+    alt Command contains "vue-language-server"
+        AR->>VA: matches(config)?
+        VA-->>AR: true (first match wins)
+        AR-->>SM: VueLanguageServerAdapter
+        Note over SM: adapter stored in ServerState
+    else Command contains "pyright" or "basedpyright"
+        AR->>VA: matches(config)?
+        VA-->>AR: false
+        AR->>PA: matches(config)?
+        PA-->>AR: true
+        AR-->>SM: PyrightAdapter
+    else No adapter matches
+        AR-->>SM: undefined (standard LSP behavior)
+    end
+
+    Note over SM,PS: === VUE ADAPTER: CUSTOM SERVER-TO-CLIENT REQUEST ===
+
+    VS->>TR: tsserver/request (server-to-client request)<br/>JSON-RPC message with id<br/>[id, "_vue:projectInfo", params]
+    TR->>SM: handleMessage()
+
+    Note over SM: handleMessage() checks:<br/>1. message.id exists (it is a request)<br/>2. adapter.handleRequest is defined
+
+    SM->>VA: handleRequest("tsserver/request", params, state)
+    VA-->>SM: [id, { configFiles: [], sourceFiles: [] }]
+    SM->>TR: sendMessage({ jsonrpc: "2.0", id, result })<br/>JSON-RPC response back to server
+    TR->>VS: Content-Length + JSON-RPC response
+
+    Note over SM,PS: === VUE ADAPTER: CUSTOM TIMEOUTS ===
+
+    Note over SM: Tool handler calls findDefinition
+    SM->>VA: getTimeout("textDocument/definition")
+    VA-->>SM: 45000ms (instead of default 30000ms)
+    SM->>TR: sendRequest("textDocument/definition", params, 45000)
+    TR->>VS: Content-Length + JSON-RPC
+    VS-->>TR: Location[] (may take up to 45s)
+    TR-->>SM: Location[]
+
+    Note over SM,PS: === PYRIGHT ADAPTER: EXTENDED TIMEOUTS ===
+
+    Note over SM: Tool handler calls findReferences
+    SM->>PA: getTimeout("textDocument/references")
+    PA-->>SM: 60000ms (instead of default 30000ms)
+    SM->>TR: sendRequest("textDocument/references", params, 60000)
+    TR->>PS: Content-Length + JSON-RPC
+    PS-->>TR: Location[] (large project may be slow)
+    TR-->>SM: Location[]
+
+    Note over SM,PS: === STANDARD NOTIFICATION HANDLING ===
+
+    VS->>TR: textDocument/publishDiagnostics (notification, no id)
+    TR->>SM: handleMessage()
+
+    Note over SM: handleMessage() checks:<br/>1. No message.id (it is a notification)<br/>2. adapter.handleNotification defined
+
+    alt adapter.handleNotification defined
+        SM->>VA: handleNotification("textDocument/publishDiagnostics", params, state)
+        VA-->>SM: false (not handled by adapter)
+    end
+
+    Note over SM: Fall through to standard handling
+    SM->>SM: Store diagnostics in serverState.diagnostics Map<br/>Update lastDiagnosticUpdate and diagnosticVersions

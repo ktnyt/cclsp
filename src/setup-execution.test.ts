@@ -79,21 +79,18 @@ describe('Setup command execution tests', () => {
         })
       );
 
-      // Build the command with --dry-run flag
+      // Build the command args and verify structure directly
       const args = buildMCPArgs(configPath, false);
 
-      // Replace 'mcp' with 'echo' to simulate the command
       const testArgs = ['claude', ...args];
 
-      // Execute with echo to verify command structure
-      const result = await executeCommand('echo', testArgs);
-
-      expect(result.success).toBe(true);
-      expect(result.stdout).toContain('claude');
-      expect(result.stdout).toContain('mcp');
-      expect(result.stdout).toContain('add');
-      expect(result.stdout).toContain('cclsp');
-      expect(result.stdout).toContain('CCLSP_CONFIG_PATH=');
+      // Verify command structure via args array (no shell dependency)
+      expect(testArgs).toContain('claude');
+      expect(testArgs).toContain('mcp');
+      expect(testArgs).toContain('add');
+      expect(testArgs).toContain('cclsp');
+      const envArg = testArgs.find((a) => a.startsWith('CCLSP_CONFIG_PATH='));
+      expect(envArg).toBeDefined();
     } finally {
       // Cleanup
       rmSync(testDir, { recursive: true, force: true });
@@ -123,7 +120,8 @@ describe('Setup command execution tests', () => {
         );
 
         // Check if claude command exists
-        const checkResult = await executeCommand('which', ['claude']);
+        const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+        const checkResult = await executeCommand(whichCmd, ['claude']);
         const hasClaudeCLI = checkResult.success && checkResult.stdout.trim().length > 0;
 
         if (hasClaudeCLI) {
@@ -186,25 +184,24 @@ describe('Setup command execution tests', () => {
           })
         );
 
-        // Generate command parts
+        // Generate command parts and verify structure directly
         const args = buildMCPArgs(configPath, false);
 
-        // Test with echo to verify command structure
-        const echoResult = await executeCommand('echo', args.slice(1));
-        expect(echoResult.success).toBe(true);
-        expect(echoResult.stdout).toContain('add');
-        expect(echoResult.stdout).toContain('cclsp');
-        expect(echoResult.stdout).toContain('CCLSP_CONFIG_PATH=');
+        // Verify command structure via args array (no shell dependency)
+        expect(args.slice(1)).toContain('add');
+        expect(args.slice(1)).toContain('cclsp');
+        const envArg = args.find((a) => a.startsWith('CCLSP_CONFIG_PATH='));
+        expect(envArg).toBeDefined();
 
         // Verify path handling based on platform
         const isWindows = process.platform === 'win32';
         if (isWindows) {
           // Windows: Path with spaces should be quoted
-          expect(echoResult.stdout).toContain('"');
+          expect(envArg).toContain('"');
         } else {
           // Non-Windows: Path with spaces should be escaped
-          expect(echoResult.stdout).toContain('\\ ');
-          expect(echoResult.stdout).not.toContain('"');
+          expect(envArg).toContain('\\ ');
+          expect(envArg).not.toContain('"');
         }
       } finally {
         // Cleanup
@@ -213,22 +210,18 @@ describe('Setup command execution tests', () => {
     }
   );
 
-  test('should handle command execution simulation', async () => {
+  test('should handle command execution simulation', () => {
     const testPath = '/path with spaces/config.json';
     const isWindows = process.platform === 'win32';
     const args = buildMCPArgs(testPath, false);
 
-    // Simulate execution with echo (always available)
-    const testArgs = ['MCP_SIMULATION:', ...args.slice(1)];
-    const result = await executeCommand('echo', testArgs);
-
-    expect(result.success).toBe(true);
-    expect(result.stdout).toContain('MCP_SIMULATION:');
-    expect(result.stdout).toContain('add');
-    expect(result.stdout).toContain('cclsp');
+    // Verify command structure via args array (no shell dependency)
+    expect(args.slice(1)).toContain('add');
+    expect(args.slice(1)).toContain('cclsp');
 
     // Verify path handling based on platform
     const envArg = args.find((arg) => arg.startsWith('CCLSP_CONFIG_PATH='));
+    expect(envArg).toBeDefined();
     if (isWindows) {
       // Windows: Path with spaces should be quoted
       expect(envArg).toContain('"');
@@ -263,7 +256,8 @@ describe('Setup command execution tests', () => {
       const args = buildMCPArgs(configPath, false);
 
       // Check if claude command exists
-      const checkResult = await executeCommand('which', ['claude']);
+      const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+      const checkResult = await executeCommand(whichCmd, ['claude']);
       if (checkResult.success) {
         // Claude is installed, we could test the actual command
         // But we'll just verify the structure is correct
