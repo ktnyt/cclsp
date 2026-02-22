@@ -53,6 +53,10 @@ const TEST_CONFIG_PATH = join(TEST_DIR, 'test-config.json');
 
 describe('LSPClient', () => {
   beforeEach(async () => {
+    // Ensure CCLSP_CONFIG_PATH is truly unset to avoid cross-test contamination.
+    // Must use Reflect.deleteProperty (not `= undefined` which coerces to string "undefined" on Windows).
+    Reflect.deleteProperty(process.env, 'CCLSP_CONFIG_PATH');
+
     // Clean up test directory
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
@@ -97,26 +101,30 @@ describe('LSPClient', () => {
 
   it('should fail to create LSPClient when config file does not exist', () => {
     const savedEnv = process.env.CCLSP_CONFIG_PATH;
-    process.env.CCLSP_CONFIG_PATH = undefined;
+    Reflect.deleteProperty(process.env, 'CCLSP_CONFIG_PATH');
     const badPath = join(tmpdir(), 'nonexistent', 'config.json');
     try {
       expect(() => {
         new LSPClient(badPath);
       }).toThrow(`Failed to load config from ${badPath}`);
     } finally {
-      process.env.CCLSP_CONFIG_PATH = savedEnv;
+      if (savedEnv !== undefined) {
+        process.env.CCLSP_CONFIG_PATH = savedEnv;
+      }
     }
   });
 
   it('should fail to create LSPClient when no configPath provided', () => {
     const savedEnv = process.env.CCLSP_CONFIG_PATH;
-    process.env.CCLSP_CONFIG_PATH = undefined;
+    Reflect.deleteProperty(process.env, 'CCLSP_CONFIG_PATH');
     try {
       expect(() => {
         new LSPClient();
       }).toThrow('configPath is required when CCLSP_CONFIG_PATH environment variable is not set');
     } finally {
-      process.env.CCLSP_CONFIG_PATH = savedEnv;
+      if (savedEnv !== undefined) {
+        process.env.CCLSP_CONFIG_PATH = savedEnv;
+      }
     }
   });
 
@@ -947,7 +955,11 @@ describe('LSPClient', () => {
           expect.stringContaining('Returning 1 cached diagnostics from publishDiagnostics')
         );
       } finally {
-        process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        if (savedLogLevel !== undefined) {
+          process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        } else {
+          Reflect.deleteProperty(process.env, 'CCLSP_LOG_LEVEL');
+        }
         getServerSpy.mockRestore();
         stderrSpy.mockRestore();
       }
@@ -986,7 +998,11 @@ describe('LSPClient', () => {
           expect.stringContaining('textDocument/diagnostic not supported or failed')
         );
       } finally {
-        process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        if (savedLogLevel !== undefined) {
+          process.env.CCLSP_LOG_LEVEL = savedLogLevel;
+        } else {
+          Reflect.deleteProperty(process.env, 'CCLSP_LOG_LEVEL');
+        }
         getServerSpy.mockRestore();
         stderrSpy.mockRestore();
       }
