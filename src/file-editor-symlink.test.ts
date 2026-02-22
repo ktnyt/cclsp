@@ -76,9 +76,7 @@ async function robustReadThroughSymlink(link: string): Promise<string> {
   return readFileSync(link, 'utf-8');
 }
 
-const TEST_DIR = process.env.CI
-  ? `${process.cwd()}/test-tmp/file-editor-symlink-test`
-  : '/tmp/file-editor-symlink-test';
+const TEST_DIR = join(tmpdir(), 'file-editor-symlink-test');
 
 describe.skipIf(!canCreateSymlinks() || !!process.env.CI)('file-editor symlink handling', () => {
   beforeEach(() => {

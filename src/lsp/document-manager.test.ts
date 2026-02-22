@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DocumentManager, getLanguageId } from './document-manager.js';
 import type { JsonRpcTransport } from './json-rpc.js';
@@ -29,7 +30,7 @@ describe('DocumentManager', () => {
   let manager: DocumentManager;
 
   beforeEach(() => {
-    TEST_DIR = mkdtempSync('/tmp/cclsp-docmgr-test-');
+    TEST_DIR = mkdtempSync(join(tmpdir(), 'cclsp-docmgr-test-'));
     transport = createMockTransport();
     manager = new DocumentManager(transport);
   });

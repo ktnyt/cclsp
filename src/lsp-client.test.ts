@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LSPClient } from './lsp-client.js';
 import * as operations from './lsp/operations.js';
@@ -46,9 +47,7 @@ function createMockDocumentManager() {
   };
 }
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/cclsp-test`
-  : '/tmp/cclsp-test';
+const TEST_DIR = join(tmpdir(), 'cclsp-test');
 
 const TEST_CONFIG_PATH = join(TEST_DIR, 'test-config.json');
 
@@ -99,10 +98,11 @@ describe('LSPClient', () => {
   it('should fail to create LSPClient when config file does not exist', () => {
     const savedEnv = process.env.CCLSP_CONFIG_PATH;
     process.env.CCLSP_CONFIG_PATH = undefined;
+    const badPath = join(tmpdir(), 'nonexistent', 'config.json');
     try {
       expect(() => {
-        new LSPClient('/nonexistent/config.json');
-      }).toThrow('Failed to load config from /nonexistent/config.json');
+        new LSPClient(badPath);
+      }).toThrow(`Failed to load config from ${badPath}`);
     } finally {
       process.env.CCLSP_CONFIG_PATH = savedEnv;
     }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from './config.js';
 
@@ -22,7 +23,7 @@ describe('loadConfig', () => {
   let savedEnv: string | undefined;
 
   beforeEach(() => {
-    testDir = mkdtempSync('/tmp/cclsp-config-test-');
+    testDir = mkdtempSync(join(tmpdir(), 'cclsp-config-test-'));
     savedEnv = process.env.CCLSP_CONFIG_PATH;
   });
 
@@ -99,7 +100,7 @@ describe('loadConfig', () => {
     });
 
     it('throws when env var points to nonexistent file', () => {
-      process.env.CCLSP_CONFIG_PATH = '/nonexistent/path.json';
+      process.env.CCLSP_CONFIG_PATH = join(testDir, 'nonexistent', 'path.json');
 
       expect(() => loadConfig()).toThrow(
         'Config file specified in CCLSP_CONFIG_PATH does not exist'

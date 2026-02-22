@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
 import { findImplementationTool } from './tools/navigation.js';
 import { renameSymbolStrictTool } from './tools/refactoring.js';
-import { pathToUri } from './utils.js';
+import { pathToUri, uriToPath } from './utils.js';
 
 type MockLSPClient = {
   findImplementation: ReturnType<typeof jest.fn>;
@@ -77,8 +77,8 @@ describe('Position-based Tool Handlers', () => {
       );
 
       expect(result.content[0]?.text).toContain('Found 2 implementation(s)');
-      expect(result.content[0]?.text).toContain('/src/impl1.ts:6:1');
-      expect(result.content[0]?.text).toContain('/src/impl2.ts:11:5');
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl1.ts'))}:6:1`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl2.ts'))}:11:5`);
     });
 
     it('should return message when no implementations found', async () => {
@@ -137,7 +137,13 @@ describe('Position-based Tool Handlers', () => {
       });
 
       await renameSymbolStrictTool.handler(
-        { file_path: 'test.ts', line: 5, character: 10, new_name: 'newName', dry_run: true },
+        {
+          file_path: 'test.ts',
+          line: 5,
+          character: 10,
+          new_name: 'newName',
+          dry_run: true,
+        },
         asClient(mockClient)
       );
 
@@ -164,7 +170,13 @@ describe('Position-based Tool Handlers', () => {
       });
 
       const result = await renameSymbolStrictTool.handler(
-        { file_path: 'test.ts', line: 6, character: 10, new_name: 'newName', dry_run: true },
+        {
+          file_path: 'test.ts',
+          line: 6,
+          character: 10,
+          new_name: 'newName',
+          dry_run: true,
+        },
         asClient(mockClient)
       );
 
@@ -229,13 +241,19 @@ describe('Position-based Tool Handlers', () => {
       });
 
       const result = await renameSymbolStrictTool.handler(
-        { file_path: 'test.ts', line: 1, character: 1, new_name: 'newName', dry_run: true },
+        {
+          file_path: 'test.ts',
+          line: 1,
+          character: 1,
+          new_name: 'newName',
+          dry_run: true,
+        },
         asClient(mockClient)
       );
 
       expect(result.content[0]?.text).toContain('[DRY RUN]');
-      expect(result.content[0]?.text).toContain('File: /src/file1.ts');
-      expect(result.content[0]?.text).toContain('File: /src/file2.ts');
+      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri('/src/file1.ts'))}`);
+      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri('/src/file2.ts'))}`);
     });
   });
 });

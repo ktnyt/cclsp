@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   getRecommendedLanguageServers,
@@ -10,9 +11,7 @@ import {
 } from './file-scanner.js';
 import { LANGUAGE_SERVERS } from './language-servers.js';
 
-const TEST_DIR = process.env.RUNNER_TEMP
-  ? `${process.env.RUNNER_TEMP}/file-scanner-test`
-  : '/tmp/file-scanner-test';
+const TEST_DIR = join(tmpdir(), 'file-scanner-test');
 
 describe('file-scanner', () => {
   beforeEach(() => {
@@ -116,7 +115,9 @@ describe('file-scanner', () => {
 
     it('should respect maxDepth parameter', async () => {
       // Create nested directories
-      await mkdir(join(TEST_DIR, 'level1', 'level2', 'level3', 'level4'), { recursive: true });
+      await mkdir(join(TEST_DIR, 'level1', 'level2', 'level3', 'level4'), {
+        recursive: true,
+      });
       await writeFile(
         join(TEST_DIR, 'level1', 'level2', 'level3', 'level4', 'deep.rs'),
         'fn main() {}'

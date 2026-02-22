@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
 import { findDefinitionTool, findReferencesTool } from './tools/navigation.js';
 import { renameSymbolTool } from './tools/refactoring.js';
-import { pathToUri } from './utils.js';
+import { pathToUri, uriToPath } from './utils.js';
 
 type MockLSPClient = {
   findSymbolsByName: ReturnType<typeof jest.fn>;
@@ -75,7 +75,7 @@ describe('MCP Tool Handlers', () => {
         asClient(mockClient)
       );
 
-      expect(result.content[0]?.text).toContain('/src/impl.ts:11:6');
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl.ts'))}:11:6`);
       expect(result.content[0]?.text).toContain('testFunction (function)');
       expect(mockClient.findSymbolsByName).toHaveBeenCalledWith(
         resolve('test.ts'),
@@ -179,7 +179,7 @@ describe('MCP Tool Handlers', () => {
       );
 
       expect(result.content[0]?.text).toContain('No symbols found with kind "class"');
-      expect(result.content[0]?.text).toContain('/src/test.ts:1:1');
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/test.ts'))}:1:1`);
     });
 
     it('should handle findDefinition returning empty array', async () => {
@@ -246,8 +246,8 @@ describe('MCP Tool Handlers', () => {
         asClient(mockClient)
       );
 
-      expect(result.content[0]?.text).toContain('/src/test.ts:4:7');
-      expect(result.content[0]?.text).toContain('/src/other.ts:21:4');
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/test.ts'))}:4:7`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/other.ts'))}:21:4`);
       expect(result.content[0]?.text).toContain('myVar (variable)');
     });
 
@@ -411,7 +411,11 @@ describe('MCP Tool Handlers', () => {
       mockClient.findSymbolsByName.mockResolvedValue({ matches: [] });
 
       const result = await renameSymbolTool.handler(
-        { file_path: 'test.ts', symbol_name: 'nonExistent', new_name: 'newName' },
+        {
+          file_path: 'test.ts',
+          symbol_name: 'nonExistent',
+          new_name: 'newName',
+        },
         asClient(mockClient)
       );
 
@@ -437,7 +441,12 @@ describe('MCP Tool Handlers', () => {
       mockClient.renameSymbol.mockResolvedValue({});
 
       const result = await renameSymbolTool.handler(
-        { file_path: 'test.ts', symbol_name: 'test', new_name: 'newTest', dry_run: true },
+        {
+          file_path: 'test.ts',
+          symbol_name: 'test',
+          new_name: 'newTest',
+          dry_run: true,
+        },
         asClient(mockClient)
       );
 
