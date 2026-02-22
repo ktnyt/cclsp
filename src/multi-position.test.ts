@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, jest } from 'bun:test';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { LSPClient } from './lsp-client.js';
 import { findImplementationTool } from './tools/navigation.js';
 import { renameSymbolStrictTool } from './tools/refactoring.js';
 import { pathToUri, uriToPath } from './utils.js';
+
+// Platform-neutral absolute paths for test fixtures
+const SRC_IMPL = join(tmpdir(), 'src', 'impl.ts');
+const SRC_IMPL1 = join(tmpdir(), 'src', 'impl1.ts');
+const SRC_IMPL2 = join(tmpdir(), 'src', 'impl2.ts');
+const SRC_TEST = join(tmpdir(), 'src', 'test.ts');
+const SRC_FILE1 = join(tmpdir(), 'src', 'file1.ts');
+const SRC_FILE2 = join(tmpdir(), 'src', 'file2.ts');
 
 type MockLSPClient = {
   findImplementation: ReturnType<typeof jest.fn>;
@@ -34,7 +43,7 @@ describe('Position-based Tool Handlers', () => {
     it('should convert 1-indexed input to 0-indexed LSP position', async () => {
       mockClient.findImplementation.mockResolvedValue([
         {
-          uri: pathToUri('/src/impl.ts'),
+          uri: pathToUri(SRC_IMPL),
           range: {
             start: { line: 10, character: 2 },
             end: { line: 10, character: 20 },
@@ -56,14 +65,14 @@ describe('Position-based Tool Handlers', () => {
     it('should format implementation locations with 1-indexed output', async () => {
       mockClient.findImplementation.mockResolvedValue([
         {
-          uri: pathToUri('/src/impl1.ts'),
+          uri: pathToUri(SRC_IMPL1),
           range: {
             start: { line: 5, character: 0 },
             end: { line: 5, character: 20 },
           },
         },
         {
-          uri: pathToUri('/src/impl2.ts'),
+          uri: pathToUri(SRC_IMPL2),
           range: {
             start: { line: 10, character: 4 },
             end: { line: 10, character: 25 },
@@ -77,8 +86,8 @@ describe('Position-based Tool Handlers', () => {
       );
 
       expect(result.content[0]?.text).toContain('Found 2 implementation(s)');
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl1.ts'))}:6:1`);
-      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri('/src/impl2.ts'))}:11:5`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_IMPL1))}:6:1`);
+      expect(result.content[0]?.text).toContain(`${uriToPath(pathToUri(SRC_IMPL2))}:11:5`);
     });
 
     it('should return message when no implementations found', async () => {
@@ -124,7 +133,7 @@ describe('Position-based Tool Handlers', () => {
     it('should convert 1-indexed input to 0-indexed LSP position', async () => {
       mockClient.renameSymbol.mockResolvedValue({
         changes: {
-          [pathToUri('/src/test.ts')]: [
+          [pathToUri(SRC_TEST)]: [
             {
               range: {
                 start: { line: 4, character: 9 },
@@ -157,7 +166,7 @@ describe('Position-based Tool Handlers', () => {
     it('should show preview in dry_run mode', async () => {
       mockClient.renameSymbol.mockResolvedValue({
         changes: {
-          [pathToUri('/src/test.ts')]: [
+          [pathToUri(SRC_TEST)]: [
             {
               range: {
                 start: { line: 5, character: 9 },
@@ -212,7 +221,7 @@ describe('Position-based Tool Handlers', () => {
     it('should show changes across multiple files in dry_run', async () => {
       mockClient.renameSymbol.mockResolvedValue({
         changes: {
-          [pathToUri('/src/file1.ts')]: [
+          [pathToUri(SRC_FILE1)]: [
             {
               range: {
                 start: { line: 0, character: 0 },
@@ -221,7 +230,7 @@ describe('Position-based Tool Handlers', () => {
               newText: 'newName',
             },
           ],
-          [pathToUri('/src/file2.ts')]: [
+          [pathToUri(SRC_FILE2)]: [
             {
               range: {
                 start: { line: 10, character: 4 },
@@ -252,8 +261,8 @@ describe('Position-based Tool Handlers', () => {
       );
 
       expect(result.content[0]?.text).toContain('[DRY RUN]');
-      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri('/src/file1.ts'))}`);
-      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri('/src/file2.ts'))}`);
+      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri(SRC_FILE1))}`);
+      expect(result.content[0]?.text).toContain(`File: ${uriToPath(pathToUri(SRC_FILE2))}`);
     });
   });
 });
